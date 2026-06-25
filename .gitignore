@@ -47,6 +47,10 @@ test_batch.json
 test_batch_debug.py
 test_batch_direct.py
 
+# Internal agent/planning docs
+AGENTS.md
+docs/superpowers/
+
 # Frontend
 frontend/node_modules/
 frontend/.next/
