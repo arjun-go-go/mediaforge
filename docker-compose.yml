@@ -1,0 +1,89 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mediaforge
+      POSTGRES_PASSWORD: mediaforge
+      POSTGRES_DB: mediaforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediaforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  redis-broker:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mediaforge:mediaforge@postgres/mediaforge
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis-broker:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  celery-worker:
+    build: .
+    command: celery -A mediaforge.celery_app worker --loglevel=info -Q high,normal,low --concurrency=8
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mediaforge:mediaforge@postgres/mediaforge
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis-broker:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-broker:
+        condition: service_healthy
+
+  celery-beat:
+    build: .
+    command: celery -A mediaforge.celery_app beat --loglevel=info
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mediaforge:mediaforge@postgres/mediaforge
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis-broker:6379/0
+    depends_on:
+      redis-broker:
+        condition: service_healthy
+
+volumes:
+  pgdata:

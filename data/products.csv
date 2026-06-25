@@ -1,0 +1,41 @@
+product_id,image_path,category,color,style,season,sales_count,description,price
+SKU001,SKU001.jpg,maxi_dress,pink,bohemian,summer,3200,Bohemian pink maxi dress with tassel tie detail and flowing chiffon fabric,29.99
+SKU002,SKU002.jpg,maxi_dress,black,floral,summer,4100,Black floral print maxi dress with V-neckline and tiered skirt,34.99
+SKU003,SKU003.jpg,midi_dress,white,minimalist,spring,2800,White minimalist midi dress with clean lines and satin finish,39.99
+SKU004,SKU004.jpg,midi_dress,red,bodycon,summer,3600,Red bodycon midi dress with sleeveless design and side slit,27.99
+SKU005,SKU005.jpg,maxi_dress,navy,elegant,autumn,2900,Navy blue elegant maxi dress with long sleeves and belt waist,44.99
+SKU006,SKU006.jpg,casual_top,beige,basic,spring,5200,Beige basic casual top with round neck and relaxed fit,14.99
+SKU007,SKU007.jpg,midi_dress,green,floral,spring,3100,Green floral midi dress with puff sleeves and A-line silhouette,32.99
+SKU008,SKU008.jpg,casual_top,white,crop,summer,4800,White crop top with square neckline and fitted silhouette,12.99
+SKU009,SKU009.jpg,maxi_dress,burgundy,slip,autumn,2500,Burgundy slip maxi dress with cowl neckline and bias cut skirt,36.99
+SKU010,SKU010.jpg,midi_dress,blue,denim,spring,3300,Blue denim midi dress with button front and adjustable waist tie,38.99
+SKU011,SKU011.jpg,midi_dress,yellow,sundress,summer,3700,Yellow sundress midi with spaghetti straps and ruffled hem,24.99
+SKU012,SKU012.jpg,casual_top,black,turtleneck,autumn,4500,Black turtleneck top in ribbed knit fabric with slim fit,19.99
+SKU013,SKU013.jpg,maxi_dress,coral,wrap,summer,2600,Coral wrap maxi dress with deep V-neck and flowing skirt,31.99
+SKU014,SKU014.jpg,midi_dress,purple,pleated,spring,2200,Purple pleated midi dress with metallic thread and V-neck,42.99
+SKU015,SKU015.jpg,casual_top,pink,blouse,spring,3900,Pink blouse with ruffle trim and balloon sleeves in chiffon,22.99
+SKU016,SKU016.jpg,maxi_dress,teal,halter,summer,2800,Teal halter neck maxi dress with open back and high slit,33.99
+SKU017,SKU017.jpg,midi_dress,black,shirt,autumn,3400,Black shirt dress midi with collar and self-tie belt,35.99
+SKU018,SKU018.jpg,casual_top,olive,utility,autumn,2100,Olive green utility top with chest pockets and roll-up sleeves,18.99
+SKU019,SKU019.jpg,maxi_dress,lavender,smocked,spring,3000,Lavender smocked maxi dress with sweetheart neckline and tiered ruffle skirt,28.99
+SKU020,SKU020.jpg,midi_dress,white,lace,summer,2700,White lace midi dress with scalloped edges and lining,46.99
+SKU021,SKU021.jpg,maxi_dress,rose,off_shoulder,summer,3500,Rose off-shoulder maxi dress with elastic bodice and full skirt,26.99
+SKU022,SKU022.jpg,casual_top,cream,knit,autumn,4000,Cream knit top with cable pattern and crew neck,21.99
+SKU023,SKU023.jpg,midi_dress,mint,linen,spring,2300,Mint green linen midi dress with side pockets and button closure,37.99
+SKU024,SKU024.jpg,maxi_dress,black,sequin,autumn,1800,Black sequin maxi dress with long sleeves for evening wear,54.99
+SKU025,SKU025.jpg,midi_dress,orange,bodycon,summer,2900,Orange bodycon midi dress with one-shoulder design,25.99
+SKU026,SKU026.jpg,casual_top,grey,hoodie,autumn,5600,Grey oversized hoodie with drawstring hood and kangaroo pocket,24.99
+SKU027,SKU027.jpg,maxi_dress,blush,tulle,spring,1900,Blush pink tulle maxi dress with layered skirt and bodice detail,58.99
+SKU028,SKU028.jpg,midi_dress,chocolate,knit,autumn,2400,Chocolate brown knit midi dress with ribbed texture and turtleneck,32.99
+SKU029,SKU029.jpg,casual_top,blue,striped,summer,4300,Blue and white striped boat neck top with relaxed fit,16.99
+SKU030,SKU030.jpg,maxi_dress,emerald,satin,summer,2000,Emerald satin maxi dress with cowl back and draped skirt,49.99
+SKU031,SKU031.jpg,midi_dress,peach,ruffle,spring,3100,Peach ruffle midi dress with asymmetric hem and flutter sleeves,28.99
+SKU032,SKU032.jpg,casual_top,white,button_down,spring,4700,White button down shirt top with collar and chest pocket,17.99
+SKU033,SKU033.jpg,maxi_dress,wine,velvet,autumn,1700,Wine velvet maxi dress with long sleeves and empire waist,52.99
+SKU034,SKU034.jpg,midi_dress,sky_blue,A_line,spring,2600,Sky blue A-line midi dress with Peter Pan collar and sash belt,34.99
+SKU035,SKU035.jpg,casual_top,rust,cardigan,autumn,3800,Rust open-front cardigan with drop shoulders and ribbed trim,23.99
+SKU036,SKU036.jpg,maxi_dress,multi,bohemian,summer,3200,Multi-color bohemian maxi dress with paisley print and fringe trim,31.99
+SKU037,SKU037.jpg,midi_dress,sage,shirt,spring,2500,Sage green shirt dress with belt and roll-up sleeves,33.99
+SKU038,SKU038.jpg,casual_top,black,camisole,summer,5100,Black lace trim camisole with adjustable straps and V-neck,11.99
+SKU039,SKU039.jpg,maxi_dress,champagne,satin,autumn,2100,Champagne satin maxi dress with one-shoulder and side drape,56.99
+SKU040,SKU040.jpg,midi_dress,coral,off_shoulder,summer,3400,Coral off-shoulder midi dress with elastic ruffle and tiered skirt,27.99
