@@ -15,12 +15,15 @@ MediaForge 是一套面向电商场景的多租户 AI 创意工作台，提供**
 ## ✨ 核心特性
 
 - 🎨 **批量产品图生成** — 单次最多支持 100 SKU 并行，通过 Celery 多优先级队列调度
+- 🖼️ **三种图像产物** — 主图 (hero shot) / 详情页 (场景+卖点+细节三视图) / 社交素材 (TikTok·抖音·小红书·Instagram 平台化创意)
+- 📐 **平台感知比例** — `tiktok` → 9:16、`xiaohongshu` → 3:4、`amazon` → 1:1 自动匹配
 - 🎬 **短视频生成** — 集成 Google Veo / ByteDance Seedance（可选）
 - 🧠 **多 Agent 智能调度** — 基于 LangGraph Supervisor 模式，自动路由到 image / video / RAG / compliance 专家
 - 🔍 **三路混合检索（Hybrid Search）** — 文本密集向量 + 图像密集向量 + TF-IDF 稀疏向量，RRF 融合
-- 🛡️ **完整的多租户体系** — JWT + Refresh Token + API Key + 配额管控 + 审计日志
+- 🛡️ **场景感知合规** — 用户提供创意 style_hint 时自动放宽平台版式硬规则，避免"江南水乡"被强制改成"纯白棚拍"
+- 🔒 **完整的多租户体系** — JWT + Refresh Token + API Key + 配额管控 + 审计日志
 - 📦 **可插拔的向量库** — 默认 Chroma 本地开发，生产推荐 Milvus / Zilliz Cloud
-- 🔐 **企业级安全** — CSRF 双提交、JTI 黑名单、登录失败锁定、合规校验
+- 🛡️ **企业级安全** — CSRF 双提交、JTI 黑名单、登录失败锁定、合规校验
 - 📊 **可观测性** — 结构化日志 + 请求 trace_id + 费用追踪 + SSE 实时进度推送
 
 ---
@@ -104,6 +107,30 @@ MediaForge 是一套面向电商场景的多租户 AI 创意工作台，提供**
 
 ---
 
+## 🎨 图像生成流水线
+
+每个 SKU 提交后，按以下规则展开为多张图：
+
+```
+SKU × output_types × target_platforms × shot_variant  →  N 张图
+```
+
+| 输出类型 | 拍摄变体 | 比例 | 适用平台 |
+|---------|---------|------|---------|
+| **主图** `main_image` | hero shot | 跟随平台 | 全平台 |
+| **详情页** `detail_page` | scene · feature · closeup（3 张） | 3:4 | 全平台 |
+| **社交素材** `social` | 平台化创意 | 跟随平台 | 仅 social 白名单 |
+
+**Prompt 组装顺序**：`base → style_hint → platform → shot_suffix → compliance → 防水印`
+
+- **场景感知合规**：当 `style_hint` 含 `江南/水乡/外景/lifestyle/...` 等关键词时，平台严格版式规则（如 Amazon "纯白背景"）自动切换为温和提示，让创意场景生效
+- **防参考图水印**：每个 prompt 末尾追加"do not copy any text/watermark/logo from reference image"，避免 Gemini 多模态复刻产品图里的营销文字
+- **平台 → 比例映射**：`workers/image/base.py` 内置 16 个主流平台映射
+
+**举例**：勾选 `主图 + 详情页`，平台选 `tiktok, amazon`，每个 SKU 产出 **2 (主图) + 6 (详情页 3 变体 × 2 平台) = 8 张**。
+
+---
+
 ## 🚀 快速开始
 
 ### 前置要求
@@ -116,7 +143,7 @@ MediaForge 是一套面向电商场景的多租户 AI 创意工作台，提供**
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/liangdabiao/mediaforge.git
+git clone https://github.com/arjun-go-go/mediaforge.git
 cd mediaforge
 ```
 
@@ -325,6 +352,12 @@ pytest --cov=mediaforge --cov-report=html
 - [x] 三路混合检索（文本 + 图像 + 稀疏）
 - [x] LangGraph 多 Agent 调度
 - [x] 任务批量删除 / 失败重试
+- [x] 详情页 / 社交素材专业实现（3 拍摄变体、平台化创意）
+- [x] 平台感知 aspect_ratio（TikTok 9:16、小红书 3:4、Amazon 1:1…）
+- [x] 场景感知合规（创意 style_hint 时放宽平台硬规则）
+- [x] Celery 事件循环资源隔离（每任务回收 DB 引擎 + httpx client）
+- [ ] 上传图水印 OCR 检测（避免 Gemini 复刻营销文字）
+- [ ] 以图搜图（图像 → 商品库相似检索）
 - [ ] WebSocket 替代 SSE（更稳定的长连接）
 - [ ] 对象存储多 backend（OSS / COS / R2）
 - [ ] Prometheus + Grafana 监控面板
