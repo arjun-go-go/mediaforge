@@ -1,10 +1,9 @@
 """Maintenance Celery tasks — run by Celery Beat on a schedule."""
 
-import asyncio
-
 from loguru import logger
 
 from mediaforge.celery_app import celery_app
+from mediaforge.orchestrator.tasks import _run_async
 
 
 @celery_app.task(name="mediaforge.orchestrator.maintenance.purge_expired_tokens", bind=True)
@@ -19,7 +18,7 @@ def purge_expired_tokens(self):
         return count
 
     try:
-        return asyncio.run(_purge())
+        return _run_async(_purge())
     except Exception as exc:
         logger.error("purge_expired_tokens failed: {}", exc)
         return 0
@@ -53,7 +52,7 @@ def purge_old_audit_logs(self):
         return total
 
     try:
-        return asyncio.run(_purge())
+        return _run_async(_purge())
     except Exception as exc:
         logger.error("purge_old_audit_logs failed: {}", exc)
         return 0

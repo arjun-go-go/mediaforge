@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Loader2, Trash2, Upload } from 'lucide-react'
 
 import { api } from '@/lib/api'
@@ -8,6 +8,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { MultiSelect } from '@/components/ui/multi-select'
+import {
+  CATEGORY_OPTIONS,
+  MARKET_OPTIONS,
+  PLATFORM_OPTIONS,
+  STYLE_PRESETS,
+} from '@/lib/sku-options'
 import type { OutputType } from '@/types/job'
 
 const OUTPUT_TYPES: { value: OutputType; label: string }[] = [
@@ -51,6 +65,30 @@ export function SkuForm({ sku, index, canRemove, onChange, onRemove }: SkuFormPr
         ? sku.output_types.filter((t) => t !== type)
         : [...sku.output_types, type],
     })
+  }
+
+  const selectedPlatforms = useMemo(
+    () =>
+      sku.target_platforms
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    [sku.target_platforms],
+  )
+
+  const setPlatforms = (next: string[]) => {
+    update({ target_platforms: next.join(', ') })
+  }
+
+  const appendStylePreset = (value: string) => {
+    if (!value) return
+    const current = sku.style_hint.trim()
+    const next = current
+      ? current.includes(value)
+        ? current
+        : `${current}、${value}`
+      : value
+    update({ style_hint: next })
   }
 
   const handleUpload = async (file: File | undefined) => {
@@ -97,23 +135,40 @@ export function SkuForm({ sku, index, canRemove, onChange, onRemove }: SkuFormPr
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`category-${index}`}>类目</Label>
-            <Input
-              id={`category-${index}`}
+            <Label>类目</Label>
+            <Select
               value={sku.category}
-              onChange={(e) => update({ category: e.target.value })}
-              placeholder="服饰"
-            />
+              onValueChange={(v) => update({ category: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="请选择类目" />
+              </SelectTrigger>
+              <SelectContent>
+                {CATEGORY_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`market-${index}`}>目标市场</Label>
-            <Input
-              id={`market-${index}`}
+            <Label>目标市场</Label>
+            <Select
               value={sku.market}
-              onChange={(e) => update({ market: e.target.value })}
-              placeholder="US"
-              maxLength={3}
-            />
+              onValueChange={(v) => update({ market: v })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="请选择市场" />
+              </SelectTrigger>
+              <SelectContent>
+                {MARKET_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -167,29 +222,43 @@ export function SkuForm({ sku, index, canRemove, onChange, onRemove }: SkuFormPr
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor={`platforms-${index}`}>目标平台(逗号分隔)</Label>
-          <Input
-            id={`platforms-${index}`}
-            value={sku.target_platforms}
-            onChange={(e) => update({ target_platforms: e.target.value })}
-            placeholder="amazon, instagram, tiktok"
+          <Label>目标平台</Label>
+          <MultiSelect
+            options={PLATFORM_OPTIONS}
+            value={selectedPlatforms}
+            onChange={setPlatforms}
+            placeholder="选择一个或多个投放平台"
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor={`style-${index}`}>风格提示</Label>
+          <div className="flex flex-wrap gap-2">
+            {STYLE_PRESETS.map((preset) => (
+              <Button
+                key={preset.value}
+                type="button"
+                variant="outline"
+                size="sm"
+                title={preset.hint}
+                onClick={() => appendStylePreset(preset.value)}
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
           <Textarea
             id={`style-${index}`}
             value={sku.style_hint}
             onChange={(e) => update({ style_hint: e.target.value })}
-            placeholder="极简白底、生活化场景、轻奢简约..."
+            placeholder="点击上方预设快捷追加,或直接输入自定义风格描述"
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor={`ref-sku-${index}`}>
             参考 SKU ID
-            <span className="ml-1 text-xs text-muted-foreground">（可选，留空则自动 RAG 检索）</span>
+            <span className="ml-1 text-xs text-muted-foreground">（可选,留空则自动 RAG 检索）</span>
           </Label>
           <Input
             id={`ref-sku-${index}`}

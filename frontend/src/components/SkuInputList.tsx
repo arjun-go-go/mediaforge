@@ -69,9 +69,6 @@ export function SkuInputList({
           图片模型 {payload.image_model}
         </Badge>
         <Badge variant="outline" className="font-normal">
-          视频模型 {payload.video_model}
-        </Badge>
-        <Badge variant="outline" className="font-normal">
           优先级 {payload.priority}
         </Badge>
         <span className="ml-auto">共 {payload.skus.length} 个 SKU</span>

@@ -1,42 +1,62 @@
+import asyncio
 from contextlib import asynccontextmanager
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from mediaforge.config import get_settings
 
-_engine = None
-_session_maker = None
+_engines: dict[int, AsyncEngine] = {}
+_session_makers: dict[int, async_sessionmaker] = {}
 
 
-def get_engine(database_url: str | None = None):
-    global _engine
+def _current_loop_key() -> int | None:
+    try:
+        return id(asyncio.get_running_loop())
+    except RuntimeError:
+        return None
+
+
+def _build_engine(database_url: str) -> AsyncEngine:
+    return create_async_engine(
+        database_url,
+        echo=False,
+        future=True,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_recycle=1800,
+        pool_timeout=30,
+    )
+
+
+def get_engine(database_url: str | None = None) -> AsyncEngine:
     if database_url is None:
         database_url = get_settings().database_url
-    if _engine is None or str(_engine.url) != database_url:
-        _engine = create_async_engine(
-            database_url,
-            echo=False,
-            future=True,
-            pool_pre_ping=True,
-            pool_size=20,
-            max_overflow=40,
-            pool_recycle=3600,
-            pool_timeout=30,
-        )
-    return _engine
+    key = _current_loop_key()
+    if key is None:
+        key = 0
+    engine = _engines.get(key)
+    if engine is not None and str(engine.url) == database_url:
+        return engine
+    engine = _build_engine(database_url)
+    _engines[key] = engine
+    _session_makers.pop(key, None)
+    return engine
 
 
-def _get_session_maker(database_url: str | None = None):
-    global _session_maker
-    target_url = database_url or get_settings().database_url
-    if _session_maker is None or str(_session_maker.bind.url) != target_url:
-        _session_maker = async_sessionmaker(
-            get_engine(database_url),
+def _get_session_maker(database_url: str | None = None) -> async_sessionmaker:
+    key = _current_loop_key() or 0
+    maker = _session_makers.get(key)
+    engine = get_engine(database_url)
+    if maker is None or maker.kw.get("bind") is not engine:
+        maker = async_sessionmaker(
+            engine,
             class_=AsyncSession,
             expire_on_commit=False,
             autoflush=False,
         )
-    return _session_maker
+        _session_makers[key] = maker
+    return maker
 
 
 @asynccontextmanager
@@ -53,9 +73,11 @@ async def get_session(database_url: str | None = None):
 
 
 async def close_engine() -> None:
-    """Dispose the current engine and clear the session maker."""
-    global _engine, _session_maker
-    if _engine is not None:
-        await _engine.dispose()
-        _engine = None
-    _session_maker = None
+    """Dispose the engine bound to the current event loop."""
+    key = _current_loop_key()
+    if key is None:
+        return
+    engine = _engines.pop(key, None)
+    _session_makers.pop(key, None)
+    if engine is not None:
+        await engine.dispose()

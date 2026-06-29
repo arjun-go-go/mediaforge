@@ -47,6 +47,9 @@ test_batch.json
 test_batch_debug.py
 test_batch_direct.py
 
+# Personal documents (resume etc.) accidentally placed in the project tree
+*.pdf
+
 # Internal agent/planning docs
 AGENTS.md
 docs/superpowers/

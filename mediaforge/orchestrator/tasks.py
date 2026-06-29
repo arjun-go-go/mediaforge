@@ -11,8 +11,30 @@ _task_logger = get_task_logger(__name__)
 
 
 def _run_async(coro):
-    """Run an async coroutine from a sync Celery task."""
-    return asyncio.run(coro)
+    """Run an async coroutine from a sync Celery task.
+
+    asyncio.run() creates and tears down a fresh event loop. Any pooled
+    resources (DB engines, httpx clients) bound to that loop must be
+    released before it closes, or subsequent tasks will see zombie
+    connections and Postgres will exhaust max_connections.
+    """
+
+    async def _wrapped():
+        try:
+            return await coro
+        finally:
+            from mediaforge.db.engine import close_engine
+            from mediaforge.http_clients import close_clients
+            try:
+                await close_engine()
+            except Exception:
+                pass
+            try:
+                await close_clients()
+            except Exception:
+                pass
+
+    return asyncio.run(_wrapped())
 
 
 @celery_app.task(

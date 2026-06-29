@@ -8,7 +8,7 @@ from mediaforge.models.job import SkuInput
 from mediaforge.orchestrator.state import JobState
 from mediaforge.rag.factory import get_vector_store
 from mediaforge.workers.base import WorkerResult
-from mediaforge.workers.image import MainImageWorker
+from mediaforge.workers.image import DetailPageWorker, MainImageWorker, SocialWorker
 from mediaforge.workers.openrouter_client import OpenRouterClient
 from mediaforge.workers.video import VeoWorker
 
@@ -61,9 +61,18 @@ async def image_worker(state: dict, config: RunnableConfig | None = None) -> dic
     except Exception:
         vector_store = None
 
-    if "main_image" in sku.output_types:
-        worker = MainImageWorker(
-            client, settings.output_dir, model=settings.default_image_model,
+    worker_classes = [
+        ("main_image", MainImageWorker),
+        ("detail_page", DetailPageWorker),
+        ("social", SocialWorker),
+    ]
+    for output_type, worker_cls in worker_classes:
+        if output_type not in sku.output_types:
+            continue
+        worker = worker_cls(
+            client,
+            settings.output_dir,
+            model=settings.default_image_model,
             vector_store=vector_store,
         )
         r = await worker.run(sku, tenant_id, job_id)
