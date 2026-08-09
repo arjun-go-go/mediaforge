@@ -20,9 +20,9 @@ class TenantQuota(BaseModel):
 
     def model_post_init(self, __context):
         defaults = {
-            TenantPlan.starter: (2, 50, 100, 10, ["fast", "seedance"]),
-            TenantPlan.pro: (5, 500, 1000, 100, ["pro", "fast", "veo", "seedance"]),
-            TenantPlan.enterprise: (20, 5000, 10000, 1000, ["pro", "fast", "veo", "seedance"]),
+            TenantPlan.starter: (2, 50, 100, 10, ["pro", "fast", "base", "seedance"]),
+            TenantPlan.pro: (5, 500, 1000, 100, ["pro", "fast", "base", "veo", "seedance"]),
+            TenantPlan.enterprise: (20, 5000, 10000, 1000, ["pro", "fast", "base", "veo", "seedance"]),
         }
         m_jobs, m_skus, img_credits, vid_credits, models = defaults[self.plan]
         self.max_concurrent_jobs = m_jobs

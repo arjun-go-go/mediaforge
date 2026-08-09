@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.env
+chroma
+outputs
+uploads
+logs
+frontend/node_modules
+frontend/.next
+frontend/dist

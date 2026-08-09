@@ -33,7 +33,11 @@ const STATUS_VARIANTS: Record<JobStatus, 'default' | 'secondary' | 'destructive'
   failed: 'destructive',
 }
 
-const TERMINAL: ReadonlySet<JobStatus> = new Set(['done', 'failed', 'partial_fail'])
+const TERMINAL: ReadonlySet<JobStatus> = new Set<JobStatus>([
+  'done',
+  'failed',
+  'partial_fail',
+])
 
 export function JobTable({
   jobs,

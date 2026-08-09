@@ -2,14 +2,23 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Package, ClipboardList, MessageSquare, Settings, X } from 'lucide-react'
+import {
+  LayoutDashboard,
+  Sparkles,
+  ClipboardList,
+  LibraryBig,
+  MessageSquare,
+  Settings,
+  X,
+} from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
 const nav = [
   { name: '工作台', href: '/dashboard', icon: LayoutDashboard },
-  { name: '批量提交', href: '/batch', icon: Package },
+  { name: '爆款商品库', href: '/products', icon: LibraryBig },
+  { name: '图片创作', href: '/batch', icon: Sparkles },
   { name: '任务列表', href: '/tasks', icon: ClipboardList },
   { name: '智能助手', href: '/agent', icon: MessageSquare },
   { name: '设置', href: '/settings/api-keys', icon: Settings },

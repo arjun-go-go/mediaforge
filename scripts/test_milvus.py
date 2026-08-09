@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("JWT_SECRET", "test-script")
 
 import mediaforge.config
+
 mediaforge.config.clear_settings_cache()
 
 from mediaforge.config import get_settings
@@ -18,7 +19,7 @@ from mediaforge.rag.factory import get_vector_store
 
 async def main() -> int:
     settings = get_settings()
-    print(f"VECTOR_STORE_BACKEND={settings.vector_store_backend}")
+    print("VECTOR_STORE=milvus (fixed)")
     print(f"MILVUS_URI={settings.milvus_uri}")
     print(f"MILVUS_DB_NAME={settings.milvus_db_name}")
     print(f"MILVUS_COLLECTION={settings.milvus_collection}")

@@ -40,8 +40,8 @@ export default function ApiKeysPage() {
 
   const fetchKeys = useCallback(async () => {
     try {
-      const res = await api.get<{ keys: ApiKeyInfo[] }>('/v1/api-keys')
-      setKeys(res.keys)
+      const res = await api.get<ApiKeyInfo[]>('/v1/api-keys')
+      setKeys(res)
     } catch {
       // ignore
     } finally {
@@ -68,11 +68,7 @@ export default function ApiKeysPage() {
 
   const handleRevoke = async (keyId: string) => {
     try {
-      await fetch(`/api/v1/api-keys/${keyId}`, {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-      })
+      await api.delete(`/v1/api-keys/${keyId}`)
       fetchKeys()
     } catch {
       // ignore

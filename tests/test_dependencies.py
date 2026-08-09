@@ -55,16 +55,10 @@ async def test_invalid_api_key_raises_401():
 
 
 @pytest.mark.asyncio
-async def test_demo_api_key_resolves_when_backcompat_enabled():
-    """When backcompat_demo_keys=true (test env default), demo keys resolve."""
-    from mediaforge.config import get_settings
-
-    if not get_settings().backcompat_demo_keys:
-        pytest.skip("backcompat_demo_keys disabled")
-
+async def test_test_api_key_resolves_through_db_resolver_contract():
     user, tenant = await get_current_principal(
         _FakeRequest(),
-        api_key="demo-key-pro",
+        api_key="test-api-key-pro",
     )
     assert tenant.plan == "pro"
     assert user is not None

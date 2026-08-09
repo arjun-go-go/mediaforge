@@ -29,6 +29,23 @@ body {
   @apply bg-background text-foreground antialiased;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

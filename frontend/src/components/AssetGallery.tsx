@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { AlertCircle, Download, ExternalLink, Image as ImageIcon, Video as VideoIcon } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -30,7 +29,14 @@ const STATUS_VARIANT: Record<AssetStatus, 'outline' | 'destructive' | 'secondary
 function assetUrl(filePath: string): string {
   if (filePath.startsWith('http://') || filePath.startsWith('https://')) return filePath
   if (filePath.startsWith('/')) return filePath
-  return `/outputs/${filePath}`
+  return filePath
+}
+
+const OUTPUT_TYPE_LABEL: Record<string, string> = {
+  main_image: '主图',
+  detail_page: '详情图',
+  pdd_white_background: '拼多多白底图',
+  video: '视频',
 }
 
 export function AssetGallery({ assets }: { assets: Asset[] }) {
@@ -68,13 +74,13 @@ export function AssetGallery({ assets }: { assets: Asset[] }) {
 
 function AssetCard({ asset }: { asset: Asset }) {
   const isVideo = asset.output_type === 'video'
-  const isSuccess = asset.status === 'success' && !!asset.file_path
-  const url = isSuccess ? assetUrl(asset.file_path!) : null
+  const hasFile = !!asset.file_path
+  const url = hasFile ? assetUrl(asset.file_path!) : null
 
   return (
-    <Card className="overflow-hidden transition-shadow hover:shadow-md">
-      <div className="aspect-square w-full bg-muted">
-        {isSuccess && url ? (
+    <Card className={`overflow-hidden transition-shadow hover:shadow-md ${asset.status === 'failed' && hasFile ? 'border-destructive/40' : ''}`}>
+      <div className="relative aspect-square w-full bg-muted">
+        {hasFile && url ? (
           isVideo ? (
             <video src={url} controls className="h-full w-full object-cover" />
           ) : (
@@ -109,6 +115,11 @@ function AssetCard({ asset }: { asset: Asset }) {
         ) : (
           <FailedPlaceholder asset={asset} />
         )}
+        {asset.status === 'failed' && hasFile && (
+          <span className="absolute right-2 top-2 rounded bg-destructive px-2 py-1 text-[11px] font-medium text-destructive-foreground shadow-sm">
+            未通过质检
+          </span>
+        )}
       </div>
       <CardContent className="space-y-2 p-3">
         <div className="flex items-center justify-between gap-2">
@@ -122,7 +133,7 @@ function AssetCard({ asset }: { asset: Asset }) {
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             {isVideo ? <VideoIcon className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
-            {asset.output_type.replace('_', ' ')}
+            {OUTPUT_TYPE_LABEL[asset.output_type] ?? asset.output_type.replaceAll('_', ' ')}
           </span>
           {asset.platform && <span className="truncate">{asset.platform}</span>}
         </div>
@@ -131,7 +142,24 @@ function AssetCard({ asset }: { asset: Asset }) {
             {asset.model_used}
           </p>
         )}
-        {isSuccess && url && (
+        {asset.status === 'failed' && asset.error_msg && (
+          <Dialog>
+            <DialogTrigger asChild>
+              <button className="line-clamp-2 w-full text-left text-xs text-destructive/80 hover:text-destructive">
+                {asset.error_msg}
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>失败原因 — {asset.sku_id}</DialogTitle>
+              </DialogHeader>
+              <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">
+                {asset.error_msg}
+              </pre>
+            </DialogContent>
+          </Dialog>
+        )}
+        {hasFile && url && (
           <div className="flex gap-1 pt-1">
             <Button
               variant="outline"
@@ -141,7 +169,7 @@ function AssetCard({ asset }: { asset: Asset }) {
             >
               <a href={url} target="_blank" rel="noreferrer">
                 <ExternalLink className="mr-1 h-3 w-3" />
-                打开
+                {asset.status === 'failed' ? '查看失败图' : '打开'}
               </a>
             </Button>
             <Button
@@ -163,7 +191,6 @@ function AssetCard({ asset }: { asset: Asset }) {
 }
 
 function FailedPlaceholder({ asset }: { asset: Asset }) {
-  const [showFull, setShowFull] = useState(false)
   const error = asset.error_msg || ''
   const truncated = error.length > 80 ? error.slice(0, 80) + '...' : error
 
@@ -185,7 +212,7 @@ function FailedPlaceholder({ asset }: { asset: Asset }) {
               className="line-clamp-3 cursor-pointer text-xs text-muted-foreground hover:text-foreground"
               title="点击查看完整错误"
             >
-              {showFull ? error : truncated}
+              {truncated}
             </button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">

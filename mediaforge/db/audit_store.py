@@ -51,7 +51,7 @@ class AuditStore:
                         success=1 if success else 0,
                         ip_address=ip_address,
                         user_agent=user_agent,
-                        metadata_=metadata,
+                        metadata=metadata,
                         created_at=_now(),
                     )
                 )

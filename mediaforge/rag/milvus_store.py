@@ -1,7 +1,15 @@
 import asyncio
+import json
 from typing import Any
 
-from pymilvus import AnnSearchRequest, DataType, MilvusClient, RRFRanker
+from pymilvus import (
+    AnnSearchRequest,
+    DataType,
+    Function,
+    FunctionType,
+    MilvusClient,
+    RRFRanker,
+)
 from loguru import logger
 
 from mediaforge.rag.models import RagItem, RagResult
@@ -26,6 +34,26 @@ def _build_category_filter(category: str | None) -> str:
         logger.warning("Rejected category filter (invalid chars): {!r}", category)
         return ""
     return f'category == "{category}"'
+
+
+def _build_search_filter(
+    category: str | None,
+    tenant_id: str | None,
+    min_sales_count: int = 0,
+    quality_status: str = "",
+) -> str:
+    scope_filter = 'visibility == "global"'
+    if tenant_id:
+        scope_filter = f'(visibility == "global" or tenant_id == "{tenant_id}")'
+    filters = [scope_filter]
+    category_filter = _build_category_filter(category)
+    if category_filter:
+        filters.append(category_filter)
+    if min_sales_count > 0:
+        filters.append(f"sales_count >= {int(min_sales_count)}")
+    if quality_status and _CATEGORY_RE.match(quality_status):
+        filters.append(f'quality_status == "{quality_status}"')
+    return " and ".join(filters)
 
 
 
@@ -59,20 +87,48 @@ class MilvusVectorStore(VectorStore):
         client = self._ensure_client()
         if not client.has_collection(self.collection):
             schema = client.create_schema(auto_id=False, enable_dynamic_field=True)
-            schema.add_field("product_id", DataType.VARCHAR, max_length=64, is_primary=True)
+            schema.add_field("document_id", DataType.VARCHAR, max_length=160, is_primary=True)
+            schema.add_field("product_id", DataType.VARCHAR, max_length=64)
+            schema.add_field("tenant_id", DataType.VARCHAR, max_length=64)
+            schema.add_field("visibility", DataType.VARCHAR, max_length=16)
+            schema.add_field("source_type", DataType.VARCHAR, max_length=32)
             schema.add_field("category", DataType.VARCHAR, max_length=64)
             schema.add_field("style", DataType.VARCHAR, max_length=64)
             schema.add_field("color", DataType.VARCHAR, max_length=64)
             schema.add_field("material", DataType.VARCHAR, max_length=64)
+            schema.add_field("season", DataType.VARCHAR, max_length=64)
+            schema.add_field("sales_count", DataType.INT64)
+            schema.add_field("price", DataType.FLOAT)
+            schema.add_field("platform", DataType.VARCHAR, max_length=64)
+            schema.add_field("market", DataType.VARCHAR, max_length=16)
+            schema.add_field("quality_status", DataType.VARCHAR, max_length=20)
             schema.add_field("image_url", DataType.VARCHAR, max_length=512)
+            schema.add_field(
+                "search_text",
+                DataType.VARCHAR,
+                max_length=4096,
+                enable_analyzer=True,
+            )
             schema.add_field("text_vector", DataType.FLOAT_VECTOR, dim=self.text_dim)
             schema.add_field("image_vector", DataType.FLOAT_VECTOR, dim=self.image_dim)
             schema.add_field("sparse_vector", DataType.SPARSE_FLOAT_VECTOR)
+            schema.add_function(
+                Function(
+                    name="search_text_bm25",
+                    function_type=FunctionType.BM25,
+                    input_field_names=["search_text"],
+                    output_field_names=["sparse_vector"],
+                )
+            )
 
             index_params = client.prepare_index_params()
             index_params.add_index(field_name="text_vector", index_type="FLAT", metric_type="COSINE")
             index_params.add_index(field_name="image_vector", index_type="FLAT", metric_type="COSINE")
-            index_params.add_index(field_name="sparse_vector", index_type="SPARSE_INVERTED_INDEX", metric_type="IP")
+            index_params.add_index(
+                field_name="sparse_vector",
+                index_type="SPARSE_INVERTED_INDEX",
+                metric_type="BM25",
+            )
 
             client.create_collection(self.collection, schema=schema, index_params=index_params)
         self._collection_ready = True
@@ -95,37 +151,98 @@ class MilvusVectorStore(VectorStore):
         data = []
         for item in items:
             row: dict[str, Any] = {
+                "document_id": item.document_id,
                 "product_id": item.product_id,
+                "tenant_id": item.tenant_id,
+                "visibility": item.visibility,
+                "source_type": item.source_type,
                 "category": item.category,
                 "style": item.style,
                 "color": item.color,
                 "material": item.material,
+                "season": item.season,
+                "sales_count": item.sales_count,
+                "price": item.price or 0.0,
+                "platform": item.platform,
+                "market": item.market,
+                "quality_status": item.quality_status,
                 "image_url": item.image_url,
+                "search_text": item.search_text,
                 "text_vector": item.text_embedding or [0.0] * self.text_dim,
                 "image_vector": item.image_embedding or [0.0] * self.image_dim,
             }
-            if item.sparse_embedding:
-                row["sparse_vector"] = item.sparse_embedding
             data.append(row)
 
         await loop.run_in_executor(None, lambda: client.upsert(collection_name=self.collection, data=data))
+
+    async def get_by_product_id(
+        self, product_id: str, tenant_id: str = ""
+    ) -> RagResult | None:
+        """Resolve an explicitly selected SKU with a scalar query, not BM25."""
+        await self._init()
+        loop = asyncio.get_running_loop()
+        client = self._client
+        product_literal = json.dumps(product_id)
+        scope_filter = 'visibility == "global"'
+        if tenant_id:
+            scope_filter = (
+                f'(visibility == "global" or tenant_id == {json.dumps(tenant_id)})'
+            )
+        rows = await loop.run_in_executor(
+            None,
+            lambda: client.query(
+                collection_name=self.collection,
+                filter=f"product_id == {product_literal} and {scope_filter}",
+                output_fields=[
+                    "document_id", "product_id", "tenant_id", "visibility",
+                    "source_type", "category", "image_url", "style", "color",
+                    "material", "season", "sales_count", "price", "platform",
+                    "market", "quality_status", "search_text",
+                ],
+                limit=10,
+            ),
+        )
+        if not rows:
+            return None
+        row = next(
+            (item for item in rows if tenant_id and item.get("tenant_id") == tenant_id),
+            rows[0],
+        )
+        metadata = {
+            key: value
+            for key, value in row.items()
+            if key not in {"document_id", "product_id", "image_url"}
+        }
+        metadata["document_id"] = row.get("document_id", "")
+        metadata["text"] = metadata.pop("search_text", "")
+        return RagResult(
+            product_id=row.get("product_id", ""),
+            score=1.0,
+            image_url=row.get("image_url", ""),
+            metadata=metadata,
+        )
 
     async def hybrid_search(
         self,
         image_path: str | None,
         text: str,
         category: str,
+        tenant_id: str = "",
         top_k: int = 5,
         query_dense: list[float] | None = None,
-        query_sparse: dict[int, float] | None = None,
         query_image: list[float] | None = None,
+        min_sales_count: int = 0,
+        quality_status: str = "",
     ) -> list[RagResult]:
         await self._init()
         loop = asyncio.get_running_loop()
         client = self._client
 
-        filter_expr = _build_category_filter(category)
+        filter_expr = _build_search_filter(
+            category, tenant_id, min_sales_count, quality_status
+        )
         reqs = []
+        candidate_limit = max(20, top_k * 4)
 
         # Text dense vector search
         if query_dense is not None:
@@ -133,17 +250,17 @@ class MilvusVectorStore(VectorStore):
                 data=[query_dense],
                 anns_field="text_vector",
                 param={"metric_type": "COSINE"},
-                limit=20,
+                limit=candidate_limit,
                 expr=filter_expr,
             ))
 
-        # Sparse text search
-        if query_sparse is not None:
+        # Raw text is analyzed by the collection's BM25 function.
+        if text.strip():
             reqs.append(AnnSearchRequest(
-                data=[query_sparse],
+                data=[text],
                 anns_field="sparse_vector",
-                param={"metric_type": "IP"},
-                limit=20,
+                param={"metric_type": "BM25"},
+                limit=candidate_limit,
                 expr=filter_expr,
             ))
 
@@ -153,7 +270,7 @@ class MilvusVectorStore(VectorStore):
                 data=[query_image],
                 anns_field="image_vector",
                 param={"metric_type": "COSINE"},
-                limit=20,
+                limit=candidate_limit,
                 expr=filter_expr,
             ))
 
@@ -165,18 +282,30 @@ class MilvusVectorStore(VectorStore):
                     reqs=reqs,
                     ranker=RRFRanker(k=60),
                     limit=top_k,
-                    output_fields=["product_id", "image_url", "style", "color", "material"],
+                    output_fields=[
+                        "document_id", "product_id", "tenant_id", "visibility",
+                        "source_type", "category", "image_url", "style", "color",
+                        "material", "season", "sales_count", "price", "platform",
+                        "market", "quality_status", "search_text",
+                    ],
                 ),
             )
             out = []
             for hits in results:
                 for hit in hits:
                     entity = hit.get("entity", {})
+                    metadata = {
+                        k: v
+                        for k, v in entity.items()
+                        if k not in {"document_id", "product_id", "image_url"}
+                    }
+                    metadata["document_id"] = entity.get("document_id", "")
+                    metadata["text"] = metadata.pop("search_text", "")
                     out.append(RagResult(
                         product_id=entity.get("product_id", ""),
                         score=hit.get("distance", 0.0),
                         image_url=entity.get("image_url", ""),
-                        metadata={k: v for k, v in entity.items() if k not in {"product_id", "image_url"}},
+                        metadata=metadata,
                     ))
             return out
 
@@ -186,5 +315,10 @@ class MilvusVectorStore(VectorStore):
         client = self._ensure_client()
         if not client.has_collection(self.collection):
             return {"status": "ok", "backend": "milvus", "count": 0}
-        stats = client.get_collection_stats(self.collection)
-        return {"status": "ok", "backend": "milvus", "count": stats.get("row_count", 0)}
+        rows = client.query(
+            collection_name=self.collection,
+            filter="",
+            output_fields=["count(*)"],
+        )
+        count = int(rows[0].get("count(*)", 0)) if rows else 0
+        return {"status": "ok", "backend": "milvus", "count": count}

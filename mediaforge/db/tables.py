@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
 )
@@ -115,6 +116,9 @@ class JobTable(Base):
 
     job_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=True)
+    source = Column(String(20), nullable=False, default="batch")
+    idempotency_key = Column(String(128), nullable=True)
     status = Column(Enum(JobStatus), nullable=False, default=JobStatus.pending)
     total_skus = Column(Integer, nullable=False)
     done_skus = Column(Integer, nullable=False, default=0)
@@ -124,8 +128,35 @@ class JobTable(Base):
     finished_at = Column(DateTime(timezone=True), nullable=True)
 
     assets = relationship("AssetTable", back_populates="job", cascade="all, delete-orphan")
+    items = relationship("JobItemTable", back_populates="job", cascade="all, delete-orphan")
 
-    __table_args__ = (Index("idx_jobs_tenant", "tenant_id", "created_at"),)
+    __table_args__ = (
+        Index("idx_jobs_tenant", "tenant_id", "created_at"),
+        Index(
+            "uq_jobs_tenant_idempotency",
+            "tenant_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=idempotency_key.isnot(None),
+        ),
+    )
+
+
+class JobItemTable(Base):
+    __tablename__ = "job_items"
+
+    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.job_id"), primary_key=True)
+    sku_id = Column(String(255), primary_key=True)
+    status = Column(String(20), nullable=False, default="pending")
+    completed_assets = Column(Integer, nullable=False, default=0)
+    failed_assets = Column(Integer, nullable=False, default=0)
+    error_msg = Column(Text, nullable=True)
+    generation_context = Column(JSON, nullable=False, default=dict)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    job = relationship("JobTable", back_populates="items")
+
+    __table_args__ = (Index("idx_job_items_status", "job_id", "status"),)
 
 
 class AssetTable(Base):
@@ -151,6 +182,38 @@ class AssetTable(Base):
     )
 
 
+class ProductTable(Base):
+    __tablename__ = "products"
+
+    document_id = Column(String(160), primary_key=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=True)
+    sku_code = Column(String(64), nullable=False)
+    visibility = Column(String(16), nullable=False)
+    source_type = Column(String(32), nullable=False)
+    category = Column(String(64), nullable=False, default="")
+    style = Column(String(64), nullable=False, default="")
+    color = Column(String(64), nullable=False, default="")
+    material = Column(String(64), nullable=False, default="")
+    season = Column(String(64), nullable=False, default="")
+    description = Column(Text, nullable=False, default="")
+    sales_count = Column(Integer, nullable=False, default=0)
+    price = Column(Numeric(12, 2), nullable=True)
+    image_url = Column(Text, nullable=False, default="")
+    search_text = Column(Text, nullable=False, default="")
+    index_status = Column(String(20), nullable=False, default="pending")
+    index_error = Column(Text, nullable=True)
+    indexed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("idx_products_tenant", "tenant_id"),
+        Index("idx_products_sku", "sku_code"),
+        Index("idx_products_scope", "visibility", "tenant_id"),
+        Index("idx_products_index_status", "index_status"),
+    )
+
+
 class MemoryTable(Base):
     __tablename__ = "memories"
 
@@ -162,6 +225,22 @@ class MemoryTable(Base):
 
     __table_args__ = (
         Index("idx_memories_tenant_key", "tenant_id", "key"),
+    )
+
+
+class AgentSessionTable(Base):
+    __tablename__ = "agent_sessions"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), primary_key=True)
+    session_id = Column(String(64), primary_key=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.tenant_id"), nullable=False)
+    title = Column(String(100), nullable=False, default="新对话")
+    context_ = Column("context", JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    __table_args__ = (
+        Index("idx_agent_sessions_tenant_user", "tenant_id", "user_id", "updated_at"),
     )
 
 

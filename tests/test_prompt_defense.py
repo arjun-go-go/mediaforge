@@ -18,7 +18,7 @@ def test_injection_payload_blocked():
         client = TestClient(app)
         response = client.post(
             "/api/v1/batch/submit",
-            headers={"X-Api-Key": "demo-key-pro"},
+            headers={"X-Api-Key": "test-api-key-pro"},
             json={
                 "skus": [
                     {

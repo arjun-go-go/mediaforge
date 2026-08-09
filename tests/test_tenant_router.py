@@ -10,12 +10,12 @@ from fastapi.testclient import TestClient
 from mediaforge.gateway.main import app
 
 
-def test_get_me_returns_tenant_info_via_demo_key():
+def test_get_me_returns_tenant_info_via_test_api_key():
     client = TestClient(app)
-    response = client.get("/api/v1/me", headers={"X-Api-Key": "demo-key-pro"})
+    response = client.get("/api/v1/me", headers={"X-Api-Key": "test-api-key-pro"})
     assert response.status_code == 200
     data = response.json()
-    assert data["name"] == "Pro"
+    assert data["name"] == "Test workspace"
     assert data["plan"] == "pro"
     assert "max_concurrent_jobs" in data["quotas"]
     # tenant_id is now a UUID string
@@ -42,7 +42,7 @@ def test_get_me_invalid_jwt_returns_401():
 
 def test_tenants_me_alias_works():
     client = TestClient(app)
-    response = client.get("/api/v1/tenants/me", headers={"X-Api-Key": "demo-key-starter"})
+    response = client.get("/api/v1/tenants/me", headers={"X-Api-Key": "test-api-key-starter"})
     assert response.status_code == 200
     data = response.json()
     assert data["plan"] == "starter"

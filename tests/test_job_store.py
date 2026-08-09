@@ -39,7 +39,7 @@ async def test_create_job_and_assets(db_engine, redis_client):
         output_type="main_image",
         model_used="google/gemini-3-pro-image",
         status=AssetStatus.success,
-        file_path="/outputs/t-1/job/sku_main.png",
+        file_path="http://localhost:9000/mediaforge/assets/t-1/job/sku_main.png",
     )
     assets = await store.get_assets_for_job(job_id)
     assert len(assets) == 1

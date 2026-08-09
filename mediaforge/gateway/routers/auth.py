@@ -37,6 +37,7 @@ from mediaforge.db.tenant_store import TenantStore
 from mediaforge.db.user_store import UserStore
 from mediaforge.gateway.dependencies import get_current_principal
 from mediaforge.gateway.middleware.csrf import generate_csrf_token
+from mediaforge.gateway.middleware.rate_limit import limiter
 from mediaforge.models.user import User, UserLoginRequest, UserPublic, UserSignupRequest
 
 
@@ -79,7 +80,7 @@ async def _issue_session(
 
     Returns (csrf_token, access_jti).
     """
-    from jose import jwt as _jwt
+    import jwt as _jwt
     s = get_settings()
     access_token = create_access_token(str(user.user_id), str(user.tenant_id))
     refresh_jti = str(uuid.uuid4())
@@ -87,7 +88,7 @@ async def _issue_session(
     csrf_token = generate_csrf_token()
 
     # Decode jti from the access token (no verification — we just created it)
-    access_payload = _jwt.get_unverified_claims(access_token)
+    access_payload = _jwt.decode(access_token, options={"verify_signature": False})
     access_jti = access_payload.get("jti", "")
 
     store = RefreshTokenStore(get_engine())
@@ -114,22 +115,27 @@ async def _issue_session(
 
 
 @router.post("/signup")
+@limiter.limit("5/minute")
 async def signup(body: UserSignupRequest, request: Request, response: Response):
-    s = get_settings()
-    if not s.allow_self_signup_tenant_id:
-        raise HTTPException(status_code=403, detail={"code": "signup_disabled", "msg": "Self-signup is disabled"})
-
+    if not get_settings().allow_self_signup:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "signup_disabled", "msg": "Public signup is disabled"},
+        )
     engine = get_engine()
     tenant_store = TenantStore(engine)
-    tenant = await tenant_store.get_by_id(s.allow_self_signup_tenant_id)
-    if tenant is None:
-        raise HTTPException(status_code=500, detail={"code": "signup_tenant_missing", "msg": "Signup tenant not found"})
-
     user_store = UserStore(engine)
     if await user_store.get_by_email(body.email):
         raise HTTPException(status_code=409, detail={"code": "email_taken", "msg": "Email already registered"})
 
+    from mediaforge.models.tenant import TenantPlan
+
     pw_hash = await hash_password_async(body.password)
+    workspace_name = (body.display_name or body.email.split("@", 1)[0]).strip()
+    tenant = await tenant_store.create(
+        name=f"{workspace_name}的工作空间",
+        plan=TenantPlan.starter,
+    )
     user = await user_store.create(
         tenant_id=tenant.tenant_id,
         email=body.email,
@@ -145,6 +151,7 @@ async def signup(body: UserSignupRequest, request: Request, response: Response):
 
 
 @router.post("/login")
+@limiter.limit("10/minute")
 async def login(body: UserLoginRequest, request: Request, response: Response):
     s = get_settings()
     engine = get_engine()
@@ -294,7 +301,6 @@ async def logout(
     access_cookie = request.cookies.get(s.cookie_access_name)
     if access_cookie:
         try:
-            from jose import jwt as _jwt
             from mediaforge.auth.jwt import verify_access_token
             access_payload = verify_access_token(access_cookie)
             access_jti = access_payload.get("jti", "")

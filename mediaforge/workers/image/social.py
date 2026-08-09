@@ -1,4 +1,4 @@
-from mediaforge.models.job import SkuInput
+from mediaforge.models.job import GenerationContext, SkuInput
 from mediaforge.workers.base import WorkerResult
 from mediaforge.workers.image.base import BaseImageWorker, aspect_ratio_for
 
@@ -67,10 +67,20 @@ class SocialWorker(BaseImageWorker):
         "scroll-stopping visual hook, strong color presence"
     )
 
-    async def run(self, sku: SkuInput, tenant_id: str, job_id: str) -> WorkerResult:
+    async def run(
+        self,
+        sku: SkuInput,
+        tenant_id: str,
+        job_id: str,
+        generation_context: GenerationContext | None = None,
+        generation_mode: str = "standard",
+    ) -> WorkerResult:
         result = WorkerResult()
-        ref_image_path, style_prompt = await self._resolve_reference(sku)
-        product_image_path = self._resolve_product_image_path(sku)
+        if generation_context is None:
+            generation_context = await self.prepare_generation_context(sku, tenant_id)
+        ref_image_path = generation_context.ref_image_path
+        style_prompt = generation_context.style_prompt
+        product_image_path = generation_context.product_image_path
 
         for platform in sku.target_platforms:
             if platform.lower() not in SOCIAL_PLATFORMS:
@@ -81,6 +91,7 @@ class SocialWorker(BaseImageWorker):
                 platform,
                 style_prompt=style_prompt,
                 shot_suffix=shot_suffix,
+                product_attributes=generation_context.product_attributes,
             )
             asset = await self._generate_and_save(
                 sku=sku,
@@ -88,9 +99,15 @@ class SocialWorker(BaseImageWorker):
                 job_id=job_id,
                 platform=platform,
                 prompt=prompt,
-                aspect_ratio=aspect_ratio_for(platform),
+                aspect_ratio=(
+                    aspect_ratio_for(platform)
+                    if sku.aspect_ratio == "auto"
+                    else sku.aspect_ratio
+                ),
                 product_image_path=product_image_path,
                 ref_image_path=ref_image_path,
+                generation_context=generation_context,
+                generation_mode=generation_mode,
             )
             if asset.status == "success":
                 result.success.append(asset)

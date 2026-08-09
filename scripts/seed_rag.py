@@ -8,8 +8,8 @@ Usage:
 CSV/Excel required columns:
     product_id, category, style, color
 Optional columns:
-    material (enriches TF-IDF text embedding)
-    image_url 或 image_path (product reference image)
+    material (enriches text dense and BM25 retrieval)
+    image_url or image_path (local images are uploaded to MinIO during import)
     description (used to enrich text embedding)
 
 Example CSV:

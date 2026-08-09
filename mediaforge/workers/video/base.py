@@ -5,9 +5,8 @@ from mediaforge.workers.base import WorkerResult
 
 
 class BaseVideoWorker(ABC):
-    def __init__(self, client, storage_dir: str, model: str):
+    def __init__(self, client, model: str):
         self.client = client
-        self.storage_dir = storage_dir
         self.model = model
 
     @abstractmethod

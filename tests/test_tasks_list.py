@@ -101,7 +101,7 @@ async def test_list_tasks_returns_jobs_for_tenant(client):
     for _ in range(2):
         await store.create_job(tenant_id=str(OTHER_TENANT_ID), payload=payload)
 
-    response = client.get("/api/v1/tasks", headers={"X-Api-Key": "demo-key-pro"})
+    response = client.get("/api/v1/tasks", headers={"X-Api-Key": "test-api-key-pro"})
     assert response.status_code == 200
     data = response.json()
     jobs = data["jobs"]
@@ -128,7 +128,7 @@ async def test_list_tasks_limit_is_respected(client):
         await asyncio.sleep(0.01)
 
     response = client.get(
-        "/api/v1/tasks?limit=2", headers={"X-Api-Key": "demo-key-pro"}
+        "/api/v1/tasks?limit=2", headers={"X-Api-Key": "test-api-key-pro"}
     )
     assert response.status_code == 200
     assert len(response.json()["jobs"]) == 2
@@ -137,7 +137,7 @@ async def test_list_tasks_limit_is_respected(client):
 @pytest.mark.asyncio
 async def test_list_tasks_limit_above_max_returns_422(client):
     response = client.get(
-        "/api/v1/tasks?limit=101", headers={"X-Api-Key": "demo-key-pro"}
+        "/api/v1/tasks?limit=101", headers={"X-Api-Key": "test-api-key-pro"}
     )
     assert response.status_code == 422
 
@@ -161,7 +161,7 @@ async def test_list_tasks_invalid_tenant_id_returns_400(client):
     app.dependency_overrides[get_tenant_only] = override_invalid_tenant
     app.dependency_overrides[get_job_store] = lambda: _BadStore()
     try:
-        response = client.get("/api/v1/tasks", headers={"X-Api-Key": "demo-key-pro"})
+        response = client.get("/api/v1/tasks", headers={"X-Api-Key": "test-api-key-pro"})
         assert response.status_code == 400
         assert response.json()["detail"] == "Invalid tenant ID"
     finally:

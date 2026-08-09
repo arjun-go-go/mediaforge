@@ -8,7 +8,7 @@ import multiprocessing
 import os
 
 # Bind
-bind = os.getenv("GUNICORN_BIND", "0.0.0.0:8000")
+bind = os.getenv("GUNICORN_BIND", "0.0.0.0:8100")
 
 # Workers — default to CPU count, capped at 4 for typical deployments.
 # Each worker is an independent asyncio event loop (UvicornWorker).

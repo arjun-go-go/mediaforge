@@ -1,0 +1,44 @@
+name: Bug report
+description: 报告可复现的问题
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: 请勿提交 API Key、生产数据或未脱敏日志。
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？预期行为是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开...
+        2. 选择...
+        3. 提交...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 提交 SHA、Release 或 Docker 镜像标签
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: 操作系统、浏览器、Python/Node/Docker 版本及部署方式
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 脱敏日志或截图
+      render: shell

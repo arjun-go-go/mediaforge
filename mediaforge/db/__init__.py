@@ -1,6 +1,15 @@
 from .engine import close_engine, get_engine, get_session
 from .redis_client import close_redis, get_redis
-from .tables import AssetStatus, AssetTable, Base, JobStatus, JobTable, TenantTable
+from .tables import (
+    AssetStatus,
+    AssetTable,
+    Base,
+    JobStatus,
+    JobItemTable,
+    JobTable,
+    ProductTable,
+    TenantTable,
+)
 
 __all__ = [
     "close_engine",
@@ -12,6 +21,8 @@ __all__ = [
     "AssetTable",
     "Base",
     "JobStatus",
+    "JobItemTable",
     "JobTable",
+    "ProductTable",
     "TenantTable",
 ]

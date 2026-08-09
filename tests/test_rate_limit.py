@@ -39,7 +39,7 @@ def test_starter_rate_limit_blocks_after_threshold():
         for _ in range(11):
             response = client.post(
                 "/api/v1/batch/submit",
-                headers={"X-Api-Key": "demo-key-starter"},
+                headers={"X-Api-Key": "test-api-key-starter"},
                 json=VALID_SKU_PAYLOAD,
             )
         assert response.status_code == 429

@@ -6,14 +6,13 @@ import pytest
 from mediaforge.db import AssetStatus
 from mediaforge.db.job_store import JobStore
 from mediaforge.models.job import BatchSubmitPayload, SkuInput
-from mediaforge.storage import OutputStorage
-from mediaforge.workers.openrouter_client import IMAGE_MODELS
+from mediaforge.workers.openrouter_client import get_image_models
 
 TENANT_ID = "550e8400-e29b-41d4-a716-446655440000"
 
 
 @pytest.mark.asyncio
-async def test_create_job_and_publish(db_engine, redis_client, tmp_path):
+async def test_create_job_and_publish(db_engine, redis_client):
     store = JobStore(db_engine, redis_client)
     payload = BatchSubmitPayload(
         skus=[
@@ -31,16 +30,14 @@ async def test_create_job_and_publish(db_engine, redis_client, tmp_path):
     job_id = await store.create_job(tenant_id=TENANT_ID, payload=payload)
     await store.start_job(job_id)
 
-    storage = OutputStorage(str(tmp_path))
-    fake_bytes = b"\x89PNG\r\n\x1a\n"
-    path = await storage.save_asset(TENANT_ID, job_id, "asset-1", fake_bytes, ext="png")
+    path = f"http://localhost:9000/mediaforge/assets/{TENANT_ID}/{job_id}/asset-1.png"
 
     await store.add_asset(
         job_id=job_id,
         tenant_id=TENANT_ID,
         sku_id="SKU-001",
         output_type="main_image",
-        model_used=IMAGE_MODELS["pro"],
+        model_used=get_image_models()["pro"],
         status=AssetStatus.success,
         file_path=path,
         platform="amazon",

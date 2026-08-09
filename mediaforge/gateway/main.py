@@ -1,22 +1,30 @@
 import asyncio
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-import uuid
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from mediaforge.config import get_settings
+from mediaforge.config import configure_langsmith_environment, get_settings
 from mediaforge.gateway.middleware.csrf import CsrfMiddleware
 from mediaforge.gateway.middleware.defense import PromptInjectionMiddleware
 from mediaforge.gateway.middleware.observability import ObservabilityMiddleware
 from mediaforge.gateway.middleware.rate_limit import limiter
-from mediaforge.gateway.routers import agent, api_keys, auth, batch, models, rag, tasks, tenant, upload
+from mediaforge.gateway.routers import (
+    agent,
+    api_keys,
+    auth,
+    batch,
+    models,
+    products,
+    rag,
+    tasks,
+    tenant,
+    upload,
+)
 from mediaforge.logging import setup_logging
 
 
@@ -32,22 +40,28 @@ async def lifespan(app: FastAPI):
         log_compression=settings.log_compression,
     )
     logger.info(
-        "MediaForge starting up (log_level={} backcompat_demo_keys={})",
+        "MediaForge starting up (log_level={} allow_self_signup={})",
         settings.log_level,
-        settings.backcompat_demo_keys,
+        settings.allow_self_signup,
     )
+
+    from mediaforge.orchestrator.agent_graph import initialize_checkpointer
+
+    await initialize_checkpointer()
 
     # Auto-seed RAG vector store if empty
     try:
         from mediaforge.rag.factory import get_vector_store
+
         vector_store = get_vector_store()
         health = await vector_store.health()
         if health.get("count", 0) == 0:
             default_csv = Path(__file__).resolve().parents[2] / "data" / "products.csv"
             if default_csv.exists():
                 logger.info("RAG vector store is empty, auto-seeding from {}", default_csv)
-                from mediaforge.rag.ingest import embed_and_upsert
                 from mediaforge.gateway.routers.rag import _parse_csv, _rows_to_items
+                from mediaforge.rag.ingest import embed_and_upsert
+
                 content = await asyncio.to_thread(default_csv.read_bytes)
                 rows = _parse_csv(content)
                 rows = _rows_to_items(rows)
@@ -61,21 +75,25 @@ async def lifespan(app: FastAPI):
     # --- Shutdown: release all resources ---
     try:
         from mediaforge.orchestrator.agent_graph import close_checkpointer
+
         await close_checkpointer()
     except Exception:
         pass
     try:
         from mediaforge.db.engine import close_engine
+
         await close_engine()
     except Exception:
         pass
     try:
         from mediaforge.db.redis_client import close_redis
+
         await close_redis()
     except Exception:
         pass
     try:
         from mediaforge.http_clients import close_clients
+
         await close_clients()
     except Exception:
         pass
@@ -83,6 +101,7 @@ async def lifespan(app: FastAPI):
 
 
 settings = get_settings()
+configure_langsmith_environment(settings)
 
 app = FastAPI(title="MediaForge", version="0.1.0", lifespan=lifespan)
 app.state.limiter = limiter
@@ -110,18 +129,11 @@ app.include_router(api_keys.router)
 app.include_router(auth.router)
 app.include_router(batch.router)
 app.include_router(models.router)
+app.include_router(products.router)
 app.include_router(tasks.router)
 app.include_router(tenant.router)
 app.include_router(upload.router)
 app.include_router(rag.router)
-
-output_path = Path(settings.output_dir)
-output_path.mkdir(parents=True, exist_ok=True)
-app.mount("/outputs", StaticFiles(directory=str(output_path)), name="outputs")
-
-upload_path = Path(settings.upload_dir)
-upload_path.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(upload_path)), name="uploads")
 
 
 @app.get("/health", tags=["ops"])
@@ -132,13 +144,14 @@ async def health():
 
 @app.get("/ready", tags=["ops"])
 async def ready():
-    """Readiness probe — checks DB and Redis connectivity."""
+    """Readiness probe — checks DB, Redis, and assistant memory mode."""
     checks: dict[str, str] = {}
     ok = True
 
     # PostgreSQL
     try:
         from mediaforge.db.engine import get_engine
+
         async with get_engine().connect() as conn:
             await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
         checks["db"] = "ok"
@@ -149,6 +162,7 @@ async def ready():
     # Redis
     try:
         from mediaforge.db.redis_client import get_redis
+
         r = await get_redis()
         await r.ping()
         checks["redis"] = "ok"
@@ -156,7 +170,19 @@ async def ready():
         checks["redis"] = f"error: {exc}"
         ok = False
 
+    from mediaforge.orchestrator.agent_graph import get_checkpointer_status
+
+    memory_status = get_checkpointer_status()
+    checks["agent_memory"] = memory_status
+
+    if memory_status != "postgres" and settings.app_env.lower() == "production":
+        ok = False
+
     if not ok:
         from fastapi.responses import JSONResponse
+
         return JSONResponse(status_code=503, content={"status": "degraded", "checks": checks})
-    return {"status": "ok", "checks": checks}
+    return {
+        "status": "degraded" if memory_status == "memory" else "ok",
+        "checks": checks,
+    }

@@ -92,7 +92,7 @@ function buildHeaders(
   if (body && !isFormData) headers.set('Content-Type', 'application/json')
 
   if (isStateChanging(method)) {
-    const token = csrfToken ?? readCsrfCookie()
+    const token = readCsrfCookie() ?? csrfToken
     if (token) headers.set('X-CSRF-Token', token)
   }
   return headers
@@ -192,13 +192,11 @@ async function requestJson<T>(
 
 async function requestFormData<T>(
   path: string,
-  file: File,
+  formData: FormData,
   timeoutMs: number,
   retried = false,
 ): Promise<T> {
   const url = `${API_BASE}${path}`
-  const formData = new FormData()
-  formData.append('file', file)
   const headers = buildHeaders('POST', undefined, formData)
   const { signal, clear } = timeoutSignal(undefined, timeoutMs)
   try {
@@ -214,7 +212,7 @@ async function requestFormData<T>(
       const err = await parseError(res)
       if (err.code === 'token_expired' || err.code === 'missing_credentials') {
         const refreshed = await attemptRefresh()
-        if (refreshed) return requestFormData<T>(path, file, timeoutMs, true)
+        if (refreshed) return requestFormData<T>(path, formData, timeoutMs, true)
       }
       onUnauthorized?.()
       throw err
@@ -234,9 +232,21 @@ export const api = {
   post: <T>(path: string, body: unknown) =>
     requestJson<T>(path, { method: 'POST', body: JSON.stringify(body) }),
   delete: <T>(path: string) => requestJson<T>(path, { method: 'DELETE' }),
-  upload: (file: File) => requestFormData<{ url: string }>('/v1/upload', file, 120000),
-  ingestCsv: (file: File) =>
-    requestFormData<{ accepted: number; message: string }>('/v1/rag/ingest', file, 60000),
+  upload: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return requestFormData<{ url: string }>('/v1/upload', formData, 120000)
+  },
+  ingestProducts: (catalog: File, images: File[]) => {
+    const formData = new FormData()
+    formData.append('file', catalog)
+    images.forEach((image) => formData.append('images', image))
+    return requestFormData<{ accepted: number; message: string }>(
+      '/v1/rag/ingest',
+      formData,
+      120000,
+    )
+  },
   ragStatus: () =>
     requestJson<{ status: string; count: number; backend: string }>('/v1/rag/status'),
   streamSse: (
@@ -265,24 +275,29 @@ export const api = {
       }
     }
 
-    const headers: Record<string, string> = { Accept: 'text/event-stream' }
-    const contentType =
-      options.body && !(options.body instanceof FormData) ? 'application/json' : undefined
-    if (contentType) headers['Content-Type'] = contentType
-    if (isStateChanging(method)) {
-      const token = csrfToken ?? readCsrfCookie()
-      if (token) headers['X-CSRF-Token'] = token
-    }
+    const openStream = async (retried = false): Promise<void> => {
+      const headers: Record<string, string> = { Accept: 'text/event-stream' }
+      const contentType =
+        options.body && !(options.body instanceof FormData) ? 'application/json' : undefined
+      if (contentType) headers['Content-Type'] = contentType
+      if (isStateChanging(method)) {
+        const token = readCsrfCookie() ?? csrfToken
+        if (token) headers['X-CSRF-Token'] = token
+      }
 
-    fetch(url, {
-      method,
-      body: options.body,
-      signal: abort.signal,
-      headers,
-      credentials: 'include',
-    })
-      .then(async (res) => {
-        if (!res.ok || !res.body) throw new Error(`SSE failed: ${res.status}`)
+      const res = await fetch(url, {
+        method,
+        body: options.body,
+        signal: abort.signal,
+        headers,
+        credentials: 'include',
+      })
+      if (res.status === 401 && !retried) {
+        const refreshed = await attemptRefresh()
+        if (refreshed) return openStream(true)
+        onUnauthorized?.()
+      }
+      if (!res.ok || !res.body) throw new Error(`SSE failed: ${res.status}`)
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
@@ -301,8 +316,9 @@ export const api = {
           }
         }
         onDone?.()
-      })
-      .catch((err) => {
+    }
+
+    openStream().catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return
         onError?.(err)
       })
