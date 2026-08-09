@@ -13,6 +13,16 @@ jobs:
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       JWT_SECRET: mediaforge-ci-secret-at-least-32-bytes
       JWT_REFRESH_SECRET: mediaforge-ci-refresh-secret-32-bytes
@@ -48,5 +58,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: cp .env.example .env
       - run: docker compose config --quiet
       - run: docker compose --profile local-milvus config --quiet
