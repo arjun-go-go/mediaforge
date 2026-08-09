@@ -13,8 +13,10 @@ class TokenUsage:
 
 class CostTracker:
     MODEL_RATES = {
-        "google/gemini-3-pro-image": {"per_image": 0.04},
-        "openai/gpt-5.4-image-2": {"per_image": 0.03},
+        "google/gemini-3.1-flash-image": {"per_image": 0.04},
+        "openai/gpt-image-2": {"per_image": 0.03},
+        "qwen/qwen-image-3-pro": {"per_image": 0.03},
+        "openai/gpt-4o-mini": {"prompt_per_million": 0.15, "completion_per_million": 0.60},
         "google/veo-3.1": {"per_video": 0.35},
         "bytedance/seedance-2.0": {"per_video": 0.25},
     }
@@ -40,6 +42,10 @@ class CostTracker:
         model = usage.get("model", "")
         count = usage.get("count", 1)
         rates = self.MODEL_RATES.get(model, {})
+        if "prompt_per_million" in rates:
+            prompt_cost = usage.get("prompt_tokens", 0) * rates["prompt_per_million"] / 1_000_000
+            completion_cost = usage.get("completion_tokens", 0) * rates["completion_per_million"] / 1_000_000
+            return prompt_cost + completion_cost
         unit_cost = rates.get("per_image", rates.get("per_video", 0.0))
         return unit_cost * count
 

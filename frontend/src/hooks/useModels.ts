@@ -19,8 +19,9 @@ type UseModelsResult = {
 }
 
 const FALLBACK_IMAGE: ModelOption[] = [
-  { alias: 'pro', model_id: 'google/gemini-3-pro-image', label: 'google/gemini-3-pro-image' },
-  { alias: 'fast', model_id: 'openai/gpt-5.4-image-2', label: 'openai/gpt-5.4-image-2' },
+  { alias: 'pro', model_id: 'google/gemini-3.1-flash-image', label: 'google/gemini-3.1-flash-image' },
+  { alias: 'fast', model_id: 'openai/gpt-image-2', label: 'openai/gpt-image-2' },
+  { alias: 'base', model_id: 'qwen/qwen-image-3-pro', label: 'qwen/qwen-image-3-pro' },
 ]
 
 const FALLBACK_VIDEO: ModelOption[] = [

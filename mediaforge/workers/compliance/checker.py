@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from mediaforge.workers.platform_rules import generation_instruction
+
 
 @dataclass
 class ComplianceResult:
@@ -20,28 +22,6 @@ class ComplianceChecker:
         "CN": {"4": "6"},
         "VN": {"4": "6"},
         "PH": {"13": "12"},
-    }
-
-    # Strict background/composition rules — overridden when the user supplies
-    # an explicit lifestyle / scene-based style_hint, since otherwise the
-    # platform rule (e.g. "pure white background") fights the artistic intent.
-    PLATFORM_STRICT_ADDENDUM = {
-        "amazon": (
-            " Amazon 主图规范:纯白背景(RGB 255,255,255),商品占画面 85%。"
-        ),
-        "shopee": (
-            " Shopee 主图规范:明亮干净背景,无边框,商品居中,生活化风格。"
-        ),
-        "tiktok": " TikTok 竖版 9:16,动感活力,强视觉冲击,适合快速滑动吸引注意力。",
-    }
-
-    # Lighter, scene-friendly compliance hint used when the user provides a
-    # creative style_hint. Brand-safety guidance is preserved; layout
-    # constraints are dropped.
-    PLATFORM_LOOSE_ADDENDUM = {
-        "amazon": " Keep the product clearly identifiable and unobstructed.",
-        "shopee": " Keep the product clearly identifiable and the composition uncluttered.",
-        "tiktok": " 9:16 vertical, strong visual hook, scroll-stopping.",
     }
 
     # Keywords that signal the user wants a lifestyle / outdoor / scene shoot.
@@ -92,19 +72,25 @@ class ComplianceChecker:
             if ip in lowered:
                 result.warnings.append(f"L3 IP 关键词命中: {ip}(需人工确认版权)")
 
-        scene_mode = self._has_scene_hint(sku)
-        addendum_map = (
-            self.PLATFORM_LOOSE_ADDENDUM if scene_mode else self.PLATFORM_STRICT_ADDENDUM
+        output_type = str(sku.get("_output_type") or "main_image")
+        platform = str(
+            sku.get("_current_platform")
+            or next(iter(sku.get("target_platforms", [])), "")
+        ).lower()
+        strict_catalog_image = (
+            (output_type == "main_image" and platform == "amazon")
+            or output_type == "pdd_white_background"
         )
+        scene_mode = self._has_scene_hint(sku) and not strict_catalog_image
         if scene_mode:
             result.warnings.append(
                 "用户提供场景化 style_hint,平台严格版式规则已放宽"
             )
-
-        for platform in sku.get("target_platforms", []):
-            addendum = addendum_map.get(platform, "")
-            if addendum:
-                result.modified_prompt += addendum
+        result.modified_prompt += " " + generation_instruction(
+            platform,
+            output_type,
+            scene_mode=scene_mode,
+        )
 
         # D: instruct the model not to copy any text/watermark from the
         # reference product image, which Gemini multimodal tends to do.

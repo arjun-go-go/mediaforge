@@ -1,6 +1,7 @@
 import pytest
 
-from mediaforge.orchestrator.nodes import fan_out, validate_job
+from mediaforge.models.job import AssetOutput
+from mediaforge.orchestrator.nodes import prepare_retry, route_after_generation, validate_job
 from mediaforge.orchestrator.state import JobState, SkuInput
 
 
@@ -16,23 +17,49 @@ def test_validate_job_rejects_empty_skus():
         validate_job(state)
 
 
-def test_fan_out_creates_image_and_video_sends():
-    sku = SkuInput(
+def _failed_asset(error: str) -> AssetOutput:
+    return AssetOutput(
         sku_id="SKU-001",
-        product_image_url="https://example.com/img.jpg",
-        product_name="Dress",
-        category="apparel",
-        target_platforms=["amazon"],
-        output_types=["main_image", "video"],
-        market="US",
+        output_type="main_image",
+        model_used="fast",
+        platform="amazon",
+        status="failed",
+        error=error,
     )
-    state = JobState(
-        job_id="j1",
-        tenant_id="t1",
-        skus=[sku],
-        total_sku_count=1,
-        status="running",
-    )
-    sends = fan_out(state)
-    assert len(sends) == 2
-    assert {s.node for s in sends} == {"image_worker", "video_worker"}
+
+
+def test_quality_failure_routes_to_retry():
+    state = {
+        "failed": [_failed_asset(
+            '生成图质量检查未通过: {"product_consistency":70,"reason":"服装融合不自然"}'
+        )],
+        "retry_count": 0,
+    }
+    assert route_after_generation(state) == "prepare_retry"
+
+
+def test_prepare_retry_selects_staged_mode_for_product_mismatch():
+    state = {
+        "failed": [_failed_asset(
+            '生成图质量检查未通过: {"product_consistency":70,"reason":"主体不一致"}'
+        )],
+        "retry_count": 0,
+        "generation_context": {
+            "input_matches": True,
+            "retrieval_mode": "none",
+        },
+    }
+    update = prepare_retry(state)
+    assert update["generation_mode"] == "staged"
+    assert update["active_image_model"] == "pro"
+    assert update["retry_count"] == 1
+
+
+def test_retry_stops_after_one_attempt():
+    state = {
+        "failed": [_failed_asset(
+            '生成图质量检查未通过: {"product_consistency":70}'
+        )],
+        "retry_count": 1,
+    }
+    assert route_after_generation(state) == "finalize_job"

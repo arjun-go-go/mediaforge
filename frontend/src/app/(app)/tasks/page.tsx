@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState, Suspense } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Loader2, RefreshCw, Trash2 } from 'lucide-react'
+import { Loader2, RefreshCw, RotateCcw, Trash2 } from 'lucide-react'
 
 import { api, ApiError } from '@/lib/api'
 import { Loading } from '@/components/Loading'
@@ -122,6 +123,11 @@ function TaskDetail({ jobId, onBack }: { jobId: string; onBack: () => void }) {
             <RefreshCw className="mr-2 h-4 w-4" />
             刷新
           </Button>
+          {TERMINAL_STATUSES.includes(job.status) && (
+            <Button asChild size="sm">
+              <Link href={`/batch?reuseJobId=${job.job_id}`}><RotateCcw className="mr-2 h-4 w-4" />沿用配置再次生成</Link>
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={onBack}>
             返回任务列表
           </Button>
@@ -167,7 +173,12 @@ function TaskDetail({ jobId, onBack }: { jobId: string; onBack: () => void }) {
           <CardTitle>提交内容</CardTitle>
         </CardHeader>
         <CardContent>
-          <SkuInputList payload={job.input_data} assets={job.assets} />
+          <SkuInputList
+            payload={job.input_data}
+            assets={job.assets}
+            referenceProducts={job.reference_products ?? {}}
+            jobItems={job.job_items ?? []}
+          />
         </CardContent>
       </Card>
 

@@ -30,6 +30,7 @@ def _build_client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
         timeout=180.0,
         proxy=s.http_proxy or None,
+        trust_env=False,
         limits=httpx.Limits(
             max_connections=200,
             max_keepalive_connections=50,

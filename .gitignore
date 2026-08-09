@@ -16,15 +16,10 @@ build/
 logs/
 *.log
 
-# Chroma / vector store
+# Legacy local runtime data (not used by the application; retained for safe migration)
 chroma/
-*.bin
-
-# Outputs & uploads (runtime data, not source)
 outputs/
 uploads/
-
-# TF-IDF model cache
 *.joblib
 
 # Celery beat schedule
@@ -53,6 +48,10 @@ test_batch_direct.py
 # Internal agent/planning docs
 AGENTS.md
 docs/superpowers/
+.codex-review-*/
+.tmp-*/
+tmp/
+*.inspect.ndjson
 
 # Frontend
 frontend/node_modules/

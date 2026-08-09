@@ -5,8 +5,23 @@ import { ChevronDown, ChevronRight, ImageIcon, Search } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import type { Asset, AssetStatus, BatchSubmitPayload, SkuInput } from '@/types/job'
+import type {
+  Asset,
+  AssetStatus,
+  BatchSubmitPayload,
+  GenerationContext,
+  JobItem,
+  ReferenceProductSummary,
+  SkuInput,
+} from '@/types/job'
 
 const ASSET_STATUS_LABEL: Record<AssetStatus, string> = {
   pending: '等待',
@@ -22,19 +37,36 @@ const ASSET_STATUS_COLOR: Record<AssetStatus, string> = {
   pending: 'text-muted-foreground',
 }
 
+const PRESENTATION_LABEL = {
+  auto: '自动推荐',
+  model_wear: '模特上身',
+  product_only: '商品静物',
+} as const
+
+const MODEL_PREFERENCE_LABEL = {
+  auto: '自动匹配',
+  female: '女模特',
+  male: '男模特',
+  no_face: '不露脸',
+} as const
+
 function resolveImgUrl(path: string | null | undefined): string | null {
   if (!path) return null
   if (path.startsWith('http://') || path.startsWith('https://')) return path
   if (path.startsWith('/')) return path
-  return `/outputs/${path}`
+  return path
 }
 
 export function SkuInputList({
   payload,
   assets,
+  referenceProducts,
+  jobItems,
 }: {
   payload: BatchSubmitPayload | null
   assets: Asset[]
+  referenceProducts: Record<string, ReferenceProductSummary>
+  jobItems: JobItem[]
 }) {
   const [query, setQuery] = useState('')
 
@@ -47,6 +79,27 @@ export function SkuInputList({
     }
     return map
   }, [assets])
+
+  const contextBySku = useMemo(() => {
+    const map = new Map<string, GenerationContext>()
+    for (const item of jobItems) {
+      const context = item.generation_context
+      if (!context || Object.keys(context).length === 0) continue
+      map.set(item.sku_id, {
+        ...context,
+        retrieval_routes: context.retrieval_routes ?? [],
+        reference_candidates: context.reference_candidates ?? [],
+        prompts: context.prompts ?? {},
+        quality_results: context.quality_results ?? [],
+        presentation_mode: context.presentation_mode ?? 'product_only',
+        model_preference: context.model_preference ?? 'auto',
+        product_attributes: context.product_attributes ?? {},
+        retry_count: context.retry_count ?? 0,
+        retry_mode: context.retry_mode ?? 'none',
+      })
+    }
+    return map
+  }, [jobItems])
 
   if (!payload || !payload.skus?.length) {
     return <p className="text-sm text-muted-foreground">未找到提交内容。</p>
@@ -88,7 +141,13 @@ export function SkuInputList({
 
       <div className="space-y-2">
         {filtered.map((sku) => (
-          <SkuRow key={sku.sku_id} sku={sku} assets={assetsBySku.get(sku.sku_id) ?? []} />
+          <SkuRow
+            key={sku.sku_id}
+            sku={sku}
+            assets={assetsBySku.get(sku.sku_id) ?? []}
+            referenceProduct={sku.ref_sku_id ? referenceProducts[sku.ref_sku_id] : undefined}
+            generationContext={contextBySku.get(sku.sku_id)}
+          />
         ))}
         {filtered.length === 0 && (
           <p className="py-4 text-center text-xs text-muted-foreground">没有匹配的 SKU。</p>
@@ -98,9 +157,35 @@ export function SkuInputList({
   )
 }
 
-function SkuRow({ sku, assets }: { sku: SkuInput; assets: Asset[] }) {
+function SkuRow({
+  sku,
+  assets,
+  referenceProduct,
+  generationContext,
+}: {
+  sku: SkuInput
+  assets: Asset[]
+  referenceProduct?: ReferenceProductSummary
+  generationContext?: GenerationContext
+}) {
   const [open, setOpen] = useState(false)
   const imgUrl = resolveImgUrl(sku.product_image_url)
+  const selectedCandidate = generationContext?.reference_candidates.find(
+    (candidate) => candidate.product_id === generationContext.selected_reference_id,
+  ) ?? generationContext?.reference_candidates[0]
+  const effectiveReference = referenceProduct
+    ? {
+        code: referenceProduct.sku_code,
+        imageUrl: referenceProduct.image_url,
+        description: referenceProduct.description || referenceProduct.category,
+      }
+    : selectedCandidate
+      ? {
+          code: selectedCandidate.product_id,
+          imageUrl: selectedCandidate.image_url,
+          description: String(selectedCandidate.metadata?.text || selectedCandidate.metadata?.category || ''),
+        }
+      : undefined
 
   const successN = assets.filter((a) => a.status === 'success').length
   const failedN = assets.filter((a) => a.status === 'failed').length
@@ -122,6 +207,20 @@ function SkuRow({ sku, assets }: { sku: SkuInput; assets: Asset[] }) {
             </div>
           )}
         </div>
+
+        {effectiveReference?.imageUrl && (
+          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded border border-primary/30 bg-muted">
+            <img
+              src={effectiveReference.imageUrl}
+              alt={`爆款参考 ${effectiveReference.code}`}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+            <span className="absolute inset-x-0 bottom-0 bg-black/65 py-0.5 text-center text-[9px] text-white">
+              参考图
+            </span>
+          </div>
+        )}
 
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex items-center gap-2">
@@ -162,17 +261,240 @@ function SkuRow({ sku, assets }: { sku: SkuInput; assets: Asset[] }) {
       {open && (
         <div className="space-y-3 border-t bg-muted/30 px-3 py-3 text-xs">
           <DetailRow label="输出类型">{sku.output_types.join(', ')}</DetailRow>
-          {sku.style_hint && <DetailRow label="风格描述">{sku.style_hint}</DetailRow>}
+          <DetailRow label="展示方式">
+            {PRESENTATION_LABEL[sku.presentation_mode ?? 'auto']}
+            {generationContext?.presentation_mode && (
+              <span className="ml-2 text-muted-foreground">
+                · 实际使用 {PRESENTATION_LABEL[generationContext.presentation_mode]}
+              </span>
+            )}
+          </DetailRow>
+          {(generationContext?.presentation_mode === 'model_wear' || sku.presentation_mode === 'model_wear') && (
+            <DetailRow label="模特偏好">
+              {MODEL_PREFERENCE_LABEL[sku.model_preference ?? 'auto']}
+            </DetailRow>
+          )}
+          {sku.style_hint && <DetailRow label="场景与风格">{sku.style_hint}</DetailRow>}
+          {effectiveReference?.imageUrl && (
+            <DetailRow label="爆款参考">
+              <div className="flex items-center gap-3">
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <button
+                      type="button"
+                      className="group relative h-20 w-20 shrink-0 cursor-zoom-in overflow-hidden rounded-md border bg-muted"
+                      title="点击放大"
+                    >
+                      <img
+                        src={effectiveReference.imageUrl}
+                        alt={effectiveReference.code}
+                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                        loading="lazy"
+                      />
+                      <span className="absolute inset-x-0 bottom-0 bg-black/65 py-0.5 text-center text-[10px] text-white">
+                        点击放大
+                      </span>
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl">
+                    <DialogHeader>
+                      <DialogTitle className="text-sm">
+                        爆款参考图 · {effectiveReference.code}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="flex justify-center">
+                      <img
+                        src={effectiveReference.imageUrl}
+                        alt={effectiveReference.code}
+                        className="max-h-[75vh] w-auto rounded-md object-contain"
+                      />
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                <div className="min-w-0">
+                  <div className="font-mono font-medium">{effectiveReference.code}</div>
+                  <div className="mt-1 line-clamp-2 text-muted-foreground">
+                    {effectiveReference.description}
+                  </div>
+                  <a
+                    href={effectiveReference.imageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block text-primary hover:underline"
+                  >
+                    打开原图
+                  </a>
+                </div>
+              </div>
+            </DetailRow>
+          )}
+          {generationContext && (
+            <div className="space-y-2 rounded-md border bg-background p-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-muted-foreground">检索链路</span>
+                {generationContext.retrieval_routes.map((route) => (
+                  <Badge key={route} variant="outline" className="h-5 text-[10px] font-normal">
+                    {route}
+                  </Badge>
+                ))}
+                {generationContext.retry_count > 0 && (
+                  <Badge variant="secondary" className="h-5 text-[10px] font-normal">
+                    已重试 · {generationContext.retry_mode}
+                  </Badge>
+                )}
+              </div>
+              {generationContext.reference_candidates.length > 1 && (
+                <div>
+                  <div className="mb-1.5 text-muted-foreground">
+                    Top-{generationContext.reference_candidates.length} 爆款候选
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {generationContext.reference_candidates.map((candidate, index) => (
+                      <Dialog key={candidate.product_id}>
+                        <DialogTrigger asChild>
+                          <button
+                            type="button"
+                            className="relative h-16 w-16 cursor-zoom-in overflow-hidden rounded border bg-muted"
+                            title={`${candidate.product_id} · ${candidate.score.toFixed(3)}`}
+                          >
+                            <img
+                              src={candidate.image_url}
+                              alt={candidate.product_id}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                            <span className="absolute left-1 top-1 rounded bg-black/65 px-1 text-[9px] text-white">
+                              #{index + 1}
+                            </span>
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-4xl">
+                          <DialogHeader>
+                            <DialogTitle className="text-sm">
+                              候选 #{index + 1} · {candidate.product_id}
+                            </DialogTitle>
+                          </DialogHeader>
+                          <div className="flex justify-center">
+                            <img
+                              src={candidate.image_url}
+                              alt={candidate.product_id}
+                              className="max-h-[75vh] w-auto rounded-md object-contain"
+                            />
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {generationContext.style_prompt && (
+                <div>
+                  <div className="text-muted-foreground">共同风格提示</div>
+                  <p className="mt-1 whitespace-pre-wrap leading-5">{generationContext.style_prompt}</p>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {Object.keys(generationContext.product_attributes).length > 0 && (
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs">
+                        查看服装结构
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader><DialogTitle>服装结构 · {sku.sku_id}</DialogTitle></DialogHeader>
+                      <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">
+                        {JSON.stringify(generationContext.product_attributes, null, 2)}
+                      </pre>
+                    </DialogContent>
+                  </Dialog>
+                )}
+                {Object.keys(generationContext.prompts).length > 0 && (
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs">
+                        查看最终提示词 ({Object.keys(generationContext.prompts).length})
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl">
+                      <DialogHeader><DialogTitle>最终提示词 · {sku.sku_id}</DialogTitle></DialogHeader>
+                      <div className="max-h-[65vh] space-y-3 overflow-auto">
+                        {Object.entries(generationContext.prompts).map(([asset, prompt]) => (
+                          <div key={asset}>
+                            <div className="mb-1 font-mono text-xs font-medium">{asset}</div>
+                            <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">{prompt}</pre>
+                          </div>
+                        ))}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                )}
+                {generationContext.quality_results.length > 0 && (
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs">
+                        查看质检记录 ({generationContext.quality_results.length})
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl">
+                      <DialogHeader><DialogTitle>质检记录 · {sku.sku_id}</DialogTitle></DialogHeader>
+                      <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">
+                        {JSON.stringify(generationContext.quality_results, null, 2)}
+                      </pre>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </div>
+            </div>
+          )}
           {imgUrl && (
-            <DetailRow label="产品图片">
-              <a
-                href={imgUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary hover:underline"
-              >
-                {sku.product_image_url}
-              </a>
+            <DetailRow label="用户上传图">
+              <div className="flex items-center gap-3">
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <button
+                      type="button"
+                      className="group relative h-20 w-20 shrink-0 cursor-zoom-in overflow-hidden rounded-md border bg-muted"
+                      title="点击放大"
+                    >
+                      <img
+                        src={imgUrl}
+                        alt={sku.product_name || sku.sku_id}
+                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                        loading="lazy"
+                      />
+                      <span className="absolute inset-x-0 bottom-0 bg-black/65 py-0.5 text-center text-[10px] text-white">
+                        点击放大
+                      </span>
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl">
+                    <DialogHeader>
+                      <DialogTitle className="text-sm">
+                        用户上传图 · {sku.product_name || sku.sku_id}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="flex justify-center">
+                      <img
+                        src={imgUrl}
+                        alt={sku.product_name || sku.sku_id}
+                        className="max-h-[75vh] w-auto rounded-md object-contain"
+                      />
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                <div className="min-w-0">
+                  <div className="font-medium">{sku.product_name || sku.sku_id}</div>
+                  <a
+                    href={imgUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block text-primary hover:underline"
+                  >
+                    打开原图
+                  </a>
+                </div>
+              </div>
             </DetailRow>
           )}
 
@@ -190,7 +512,7 @@ function SkuRow({ sku, assets }: { sku: SkuInput; assets: Asset[] }) {
                         {ASSET_STATUS_LABEL[a.status]}
                       </span>
                       <span className="truncate text-muted-foreground">
-                        {a.output_type}
+                        {a.output_type === 'pdd_white_background' ? '拼多多白底图' : a.output_type}
                         {a.platform ? ` · ${a.platform}` : ''}
                       </span>
                     </div>
@@ -202,10 +524,10 @@ function SkuRow({ sku, assets }: { sku: SkuInput; assets: Asset[] }) {
                         {a.error_msg}
                       </span>
                     )}
-                    {a.status === 'success' && a.file_path && (
+                    {a.file_path && (
                       <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" asChild>
                         <a href={resolveImgUrl(a.file_path) || '#'} target="_blank" rel="noreferrer">
-                          查看
+                          {a.status === 'failed' ? '查看失败图' : '查看'}
                         </a>
                       </Button>
                     )}

@@ -1,9 +1,9 @@
 import csv
 import io
-
-from loguru import logger
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from loguru import logger
 from pydantic import BaseModel
 
 from mediaforge.config import get_settings
@@ -16,7 +16,7 @@ from mediaforge.rag.models import RagResult
 
 router = APIRouter(prefix="/api/v1/rag")
 
-REQUIRED_COLS = {"product_id", "category", "style", "color", "material"}
+REQUIRED_COLS = {"product_id", "category", "style", "color"}
 ALLOWED_CONTENT_TYPES = {
     "text/csv",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -70,7 +70,9 @@ def _parse_excel(content: bytes) -> list[dict]:
     try:
         import openpyxl
     except ImportError:
-        raise HTTPException(status_code=422, detail="openpyxl not installed; use CSV format or install openpyxl")
+        raise HTTPException(
+            status_code=422, detail="openpyxl not installed; use CSV format or install openpyxl"
+        )
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     ws = wb.active
     rows_iter = ws.iter_rows(values_only=True)
@@ -78,11 +80,7 @@ def _parse_excel(content: bytes) -> list[dict]:
     missing = REQUIRED_COLS - set(headers)
     if missing:
         raise ValueError(f"Missing required columns: {sorted(missing)}")
-    rows = [
-        dict(zip(headers, row))
-        for row in rows_iter
-        if any(c is not None for c in row)
-    ]
+    rows = [dict(zip(headers, row)) for row in rows_iter if any(c is not None for c in row)]
     wb.close()
     return rows
 
@@ -98,9 +96,21 @@ def _rows_to_items(rows: list[dict]) -> list[dict]:
     return clean
 
 
-async def _embed_and_upsert(rows: list[dict]) -> None:
+async def _embed_and_upsert(
+    rows: list[dict],
+    tenant_id: str,
+    image_files: dict[str, tuple[bytes, str]],
+) -> None:
     from mediaforge.rag.ingest import embed_and_upsert
-    await embed_and_upsert(rows)
+
+    await embed_and_upsert(
+        rows,
+        image_files=image_files,
+        tenant_id=tenant_id,
+        visibility="private",
+        source_type="user_upload",
+        require_image=True,
+    )
 
 
 @router.post("/ingest", response_model=IngestResponse)
@@ -109,6 +119,7 @@ async def ingest_products(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    images: list[UploadFile] = File(default=[]),
     tenant: Tenant = Depends(get_tenant_only),
 ) -> IngestResponse:
     settings = get_settings()
@@ -137,7 +148,38 @@ async def ingest_products(
     if not rows:
         raise HTTPException(status_code=422, detail="No valid rows found after deduplication")
 
-    background_tasks.add_task(_embed_and_upsert, rows)
+    image_files: dict[str, tuple[bytes, str]] = {}
+    for image in images:
+        filename = Path(image.filename or "").name
+        if not filename:
+            continue
+        image_content = await image.read()
+        ext = Path(filename).suffix or ".jpg"
+        image_files[filename.lower()] = (image_content, ext)
+        await image.close()
+
+    missing_images: list[str] = []
+    for row in rows:
+        product_id = str(row.get("product_id") or "").strip()
+        raw = str(row.get("image_url") or row.get("image_path") or "").strip()
+        is_remote = raw.startswith(("http://", "https://", "data:"))
+        is_uploaded = bool(raw) and Path(raw).name.lower() in image_files
+        if not is_remote and not is_uploaded:
+            missing_images.append(f"{product_id}: {raw or '未填写图片文件名'}")
+    if missing_images:
+        preview = "；".join(missing_images[:10])
+        suffix = f"；另有 {len(missing_images) - 10} 条" if len(missing_images) > 10 else ""
+        raise HTTPException(
+            status_code=422,
+            detail=f"以下商品没有匹配到上传图片：{preview}{suffix}",
+        )
+
+    background_tasks.add_task(
+        _embed_and_upsert,
+        rows,
+        str(tenant.tenant_id),
+        image_files,
+    )
 
     return IngestResponse(
         accepted=len(rows),
@@ -169,14 +211,12 @@ async def search_products(
     embed_client = DashScopeEmbeddingClient()
 
     query_dense = None
-    query_sparse = None
     query_image = None
 
     try:
         query_dense = await embed_client.embed_text(body.query)
-        query_sparse = embed_client.encode_sparse(body.query)
     except Exception as exc:
-        logger.warning("Embedding query failed: {}", exc)
+        logger.warning("Text dense embedding failed; BM25 search remains available: {}", exc)
 
     if body.image_url:
         try:
@@ -186,6 +226,7 @@ async def search_products(
 
     vector_store = get_vector_store()
     from mediaforge.db.redis_client import get_redis
+
     redis = await get_redis()
     cached = CachedRetriever(vector_store, redis=redis)
     retriever = ReferenceRetriever(cached)
@@ -194,9 +235,9 @@ async def search_products(
         image_path=body.image_url or None,
         text=body.query,
         category=body.category,
+        tenant_id=str(tenant.tenant_id),
         top_k=body.top_k,
         query_dense=query_dense,
-        query_sparse=query_sparse,
         query_image=query_image,
     )
 
@@ -218,19 +259,25 @@ async def search_products(
                     product_id=c["product_id"],
                     score=c.get("rerank_score", c.get("score", 0.0)),
                     image_url=c.get("image_url", ""),
-                    metadata={k: v for k, v in c.items() if k not in {"product_id", "image_url", "score", "rerank_score"}},
+                    metadata={
+                        k: v
+                        for k, v in c.items()
+                        if k not in {"product_id", "image_url", "score", "rerank_score"}
+                    },
                 )
                 for c in reranked
             ]
         except Exception as exc:
             logger.warning("Rerank failed: {}", exc)
 
-    return SearchResponse(results=[
-        SearchResult(
-            product_id=r.product_id,
-            score=r.score,
-            image_url=r.image_url,
-            metadata=r.metadata,
-        )
-        for r in refs
-    ])
+    return SearchResponse(
+        results=[
+            SearchResult(
+                product_id=r.product_id,
+                score=r.score,
+                image_url=r.image_url,
+                metadata=r.metadata,
+            )
+            for r in refs
+        ]
+    )

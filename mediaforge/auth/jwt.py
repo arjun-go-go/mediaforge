@@ -12,7 +12,8 @@ specific 401 code that the frontend recognises for auto-refresh.
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from jose import ExpiredSignatureError, JWTError, jwt
+import jwt
+from jwt import ExpiredSignatureError, InvalidTokenError as PyJWTInvalidTokenError
 
 from mediaforge.config import get_settings
 
@@ -78,7 +79,7 @@ def verify_access_token(token: str) -> dict:
         payload = jwt.decode(token, s.jwt_secret, algorithms=[s.jwt_algorithm])
     except ExpiredSignatureError as exc:
         raise TokenExpiredError("Access token expired") from exc
-    except JWTError as exc:
+    except PyJWTInvalidTokenError as exc:
         raise InvalidTokenError("Invalid access token") from exc
     if payload.get("type") and payload["type"] != "access":
         raise InvalidTokenError("Wrong token type")
@@ -93,7 +94,7 @@ def verify_refresh_token(token: str) -> dict:
         payload = jwt.decode(token, s.jwt_refresh_secret, algorithms=[s.jwt_algorithm])
     except ExpiredSignatureError as exc:
         raise TokenExpiredError("Refresh token expired") from exc
-    except JWTError as exc:
+    except PyJWTInvalidTokenError as exc:
         raise InvalidTokenError("Invalid refresh token") from exc
     if payload.get("type") != "refresh":
         raise InvalidTokenError("Wrong token type")

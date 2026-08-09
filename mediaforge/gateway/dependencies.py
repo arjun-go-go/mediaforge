@@ -5,8 +5,7 @@ router. Resolution order:
 
   1. access-token cookie (primary, set by /api/v1/auth/login)
   2. Authorization: Bearer <token> header (OAuth-style callers)
-  3. X-Api-Key header — only accepted when backcompat_demo_keys is True or
-     a real DB-backed api_key exists
+  3. X-Api-Key header — accepted only for a real DB-backed API key
 
 For JWT paths, after signature verification:
   a. Check the JTI blacklist (populated on logout) — reject if found.
@@ -116,7 +115,7 @@ async def get_current_principal(
         except ValueError as exc:
             raise HTTPException(status_code=401, detail={"code": "invalid_principal", "msg": str(exc)}) from exc
 
-    # Legacy API key (dev / real DB-backed key)
+    # DB-backed API key
     if api_key:
         try:
             return await resolver.resolve_by_api_key(api_key)

@@ -8,9 +8,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from mediaforge.config import get_settings
 from mediaforge.logging import trace_id_var
 
-# Paths that carry binary/streaming bodies — skip body logging for these
-_SKIP_BODY_PATHS = {"/outputs"}
-_SKIP_BODY_PREFIXES = ("/outputs/",)
+# Binary assets are served by MinIO; API responses are JSON/SSE only.
+_SKIP_BODY_PATHS: set[str] = set()
+_SKIP_BODY_PREFIXES: tuple[str, ...] = ()
 
 # Truncate large bodies to this many chars in the log
 _BODY_MAX_CHARS = 2000
@@ -26,7 +26,7 @@ def _should_log_body(path: str) -> bool:
 
 
 def _truncate(s: str, n: int = _BODY_MAX_CHARS) -> str:
-    return s if len(s) <= n else s[:n] + f"…(+{len(s)-n})"
+    return s if len(s) <= n else s[:n] + f"…(+{len(s) - n})"
 
 
 def _fmt_body(raw: bytes) -> str:
@@ -60,13 +60,10 @@ class ObservabilityMiddleware:
             return
 
         headers = dict(scope.get("headers") or [])
-        trace_id = (
-            next(
-                (v.decode() for k, v in headers.items() if k == b"x-trace-id"),
-                None,
-            )
-            or str(uuid.uuid4())
-        )
+        trace_id = next(
+            (v.decode() for k, v in headers.items() if k == b"x-trace-id"),
+            None,
+        ) or str(uuid.uuid4())
         trace_id_var.set(trace_id)
 
         scope.setdefault("state", {})
@@ -103,9 +100,7 @@ class ObservabilityMiddleware:
                 raw_headers = list(message.get("headers") or [])
                 settings = get_settings()
                 raw_headers.append((b"x-trace-id", trace_id.encode()))
-                raw_headers.append(
-                    (b"x-langsmith-project", settings.langsmith_project.encode())
-                )
+                raw_headers.append((b"x-langsmith-project", settings.langsmith_project.encode()))
                 # Detect SSE / streaming — don't buffer the body
                 for k, v in raw_headers:
                     if k == b"content-type" and b"event-stream" in v:

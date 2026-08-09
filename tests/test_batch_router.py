@@ -31,7 +31,7 @@ def test_submit_batch_with_invalid_sku():
     client = TestClient(app)
     response = client.post(
         "/api/v1/batch/submit",
-        headers={"X-Api-Key": "demo-key-pro"},
+        headers={"X-Api-Key": "test-api-key-pro"},
         json={
             "skus": [
                 {

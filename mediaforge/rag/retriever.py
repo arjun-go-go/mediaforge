@@ -14,10 +14,12 @@ class Retriever(Protocol):
         image_path: str | None,
         text: str,
         category: str,
+        tenant_id: str = "",
         top_k: int = 5,
         query_dense: list[float] | None = None,
-        query_sparse: dict[int, float] | None = None,
         query_image: list[float] | None = None,
+        min_sales_count: int = 0,
+        quality_status: str = "",
     ) -> list[RagResult]: ...
 
 
@@ -36,19 +38,27 @@ class ReferenceRetriever:
         image_path: str | None,
         text: str,
         category: str,
+        tenant_id: str = "",
         top_k: int = 5,
         query_dense: list[float] | None = None,
-        query_sparse: dict[int, float] | None = None,
         query_image: list[float] | None = None,
+        min_sales_count: int = 0,
+        quality_status: str = "",
     ) -> list[RagResult]:
         # Round 1: exact category filter
-        results = await self._search(image_path, text, category, top_k, query_dense, query_sparse, query_image)
+        results = await self._search(
+            image_path, text, category, tenant_id, top_k, query_dense, query_image,
+            min_sales_count, quality_status,
+        )
         if len(results) >= MIN_RESULTS_THRESHOLD:
             return results
 
         # Round 2: no category filter (broaden search)
         logger.info("Retrieval round 1 returned {} results, retrying without category filter", len(results))
-        results = await self._search(image_path, text, None, top_k, query_dense, query_sparse, query_image)
+        results = await self._search(
+            image_path, text, None, tenant_id, top_k, query_dense, query_image,
+            min_sales_count, quality_status,
+        )
         if len(results) >= MIN_RESULTS_THRESHOLD:
             return results
 
@@ -56,7 +66,10 @@ class ReferenceRetriever:
         logger.info("Retrieval round 2 returned {} results, final attempt with relaxed query", len(results))
         short_text = self._shorten_query(text)
         if short_text != text:
-            results = await self._search(image_path, short_text, None, top_k, query_dense, query_sparse, query_image)
+            results = await self._search(
+                image_path, short_text, None, tenant_id, top_k, query_dense, query_image,
+                min_sales_count, quality_status,
+            )
 
         return results
 
@@ -65,19 +78,23 @@ class ReferenceRetriever:
         image_path: str | None,
         text: str,
         category: str | None,
+        tenant_id: str,
         top_k: int,
         query_dense: list[float] | None,
-        query_sparse: dict[int, float] | None,
         query_image: list[float] | None = None,
+        min_sales_count: int = 0,
+        quality_status: str = "",
     ) -> list[RagResult]:
         return await self.backend.retrieve(
             image_path=image_path,
             text=text,
             category=category or "",
+            tenant_id=tenant_id,
             top_k=top_k,
             query_dense=query_dense,
-            query_sparse=query_sparse,
             query_image=query_image,
+            min_sales_count=min_sales_count,
+            quality_status=quality_status,
         )
 
     @staticmethod

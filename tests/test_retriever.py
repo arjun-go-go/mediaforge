@@ -1,27 +1,26 @@
 import pytest
 
-from mediaforge.rag.models import RagItem
+from mediaforge.rag.models import RagResult
 from mediaforge.rag.retriever import ReferenceRetriever
-from mediaforge.rag.vector_store import ChromaVectorStore
+
+
+class StubRetriever:
+    async def retrieve(self, **kwargs):
+        if kwargs.get("category") == "apparel":
+            return [
+                RagResult(
+                    product_id="P001",
+                    score=0.9,
+                    image_url="https://minio.example/mediaforge/P001.jpg",
+                    metadata={"category": "apparel"},
+                )
+            ]
+        return []
 
 
 @pytest.mark.asyncio
-async def test_retriever_finds_references(tmp_path):
-    store = ChromaVectorStore(persist_dir=str(tmp_path / "chroma"))
-    await store.upsert(
-        [
-            RagItem(
-                product_id="P001",
-                category="apparel",
-                style="elegant",
-                color="red",
-                material="silk",
-                image_url="https://example.com/p001.jpg",
-                text_embedding=[0.1] * 1024,
-            )
-        ]
-    )
-    retriever = ReferenceRetriever(vector_store=store)
+async def test_retriever_finds_references():
+    retriever = ReferenceRetriever(StubRetriever())
     refs = await retriever.retrieve(
         image_path=None,
         text="elegant silk dress",

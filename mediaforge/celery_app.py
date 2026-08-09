@@ -3,11 +3,12 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
-from mediaforge.config import get_settings
+from mediaforge.config import configure_langsmith_environment, get_settings
 
 
 def create_celery() -> Celery:
     settings = get_settings()
+    configure_langsmith_environment(settings)
     broker_url = os.getenv("CELERY_BROKER_URL", settings.redis_url)
 
     app = Celery(
@@ -30,7 +31,7 @@ def create_celery() -> Celery:
             "low":    {"exchange": "low",    "routing_key": "low"},
         },
         task_routes={
-            "mediaforge.orchestrator.tasks.process_job": {"queue": "high"},
+            "mediaforge.orchestrator.tasks.process_sku": {"queue": "normal"},
             "mediaforge.orchestrator.maintenance.*": {"queue": "low"},
         },
         # Worker

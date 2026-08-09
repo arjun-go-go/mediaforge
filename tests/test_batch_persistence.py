@@ -1,9 +1,9 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from mediaforge.db.job_store import JobStore
-from mediaforge.models.job import AssetOutput, BatchSubmitPayload, SkuInput
+from mediaforge.models.job import AssetOutput, BatchSubmitPayload, GenerationContext, SkuInput
 from mediaforge.orchestrator.batch_graph import build_batch_graph
 from mediaforge.orchestrator.state import JobState
 from mediaforge.workers.base import WorkerResult
@@ -17,7 +17,9 @@ def _set_required_env(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_batch_graph_persists_assets(db_engine, redis_client, tmp_path, monkeypatch):
+async def test_batch_graph_returns_assets_for_task_persistence(
+    db_engine, redis_client, tmp_path, monkeypatch
+):
     _set_required_env(monkeypatch)
 
     # Ensure get_settings reads the patched env values when the graph runs.
@@ -47,15 +49,34 @@ async def test_batch_graph_persists_assets(db_engine, redis_client, tmp_path, mo
         tenant_id=TENANT_ID,
         skus=payload.skus,
         total_sku_count=1,
+        image_model="fast",
+        active_image_model="fast",
+        video_model="veo",
+        completed=[],
+        failed=[],
+        logs=[],
+        generation_context={},
+        generation_mode="standard",
+        retry_count=0,
         status="running",
     )
 
-    graph = build_batch_graph(engine=db_engine)
+    graph = await build_batch_graph()
     with (
-        patch("mediaforge.orchestrator.nodes.get_engine", return_value=db_engine),
-        patch("mediaforge.orchestrator.nodes.get_redis", return_value=redis_client),
-        patch("mediaforge.workers.image.main_image.MainImageWorker.run") as mock_run,
+        patch(
+            "mediaforge.workers.image.main_image.MainImageWorker.prepare_generation_context",
+            new_callable=AsyncMock,
+        ) as mock_prepare,
+        patch(
+            "mediaforge.workers.image.main_image.MainImageWorker.run",
+            new_callable=AsyncMock,
+        ) as mock_run,
     ):
+        mock_prepare.return_value = GenerationContext(
+            product_image_path=payload.skus[0].product_image_url,
+            input_matches=True,
+            retrieval_mode="none",
+        )
         mock_run.return_value = WorkerResult(
             success=[
                 AssetOutput(
@@ -68,8 +89,10 @@ async def test_batch_graph_persists_assets(db_engine, redis_client, tmp_path, mo
                 )
             ]
         )
-        await graph.ainvoke(initial, {"configurable": {"thread_id": "thread-t1"}})
+        result = await graph.ainvoke(
+            initial, {"configurable": {"thread_id": "thread-t1"}}
+        )
 
-    assets = await store.get_assets_for_job(job_id)
-    assert len(assets) == 1
-    assert assets[0]["status"] == "success"
+    assert result["status"] == "done"
+    assert len(result["completed"]) == 1
+    assert result["generation_context"]["input_matches"] is True

@@ -40,33 +40,53 @@ export const MARKET_OPTIONS: Option[] = [
   { value: 'SA', label: '沙特 SA' },
 ]
 
-export type PlatformGroup = '电商' | '短视频' | '社交'
+export type PlatformGroup = '电商'
 
-export const PLATFORM_OPTIONS: { value: string; label: string; group: PlatformGroup }[] = [
-  { value: 'taobao', label: '淘宝', group: '电商' },
-  { value: 'tmall', label: '天猫', group: '电商' },
-  { value: 'jd', label: '京东', group: '电商' },
-  { value: 'pinduoduo', label: '拼多多', group: '电商' },
-  { value: 'amazon', label: 'Amazon', group: '电商' },
-  { value: 'shopee', label: 'Shopee', group: '电商' },
-  { value: 'lazada', label: 'Lazada', group: '电商' },
-  { value: 'tiktok', label: 'TikTok', group: '短视频' },
-  { value: 'douyin', label: '抖音', group: '短视频' },
-  { value: 'kuaishou', label: '快手', group: '短视频' },
-  { value: 'reels', label: 'Instagram Reels', group: '短视频' },
-  { value: 'shorts', label: 'YouTube Shorts', group: '短视频' },
-  { value: 'xiaohongshu', label: '小红书', group: '社交' },
-  { value: 'instagram', label: 'Instagram', group: '社交' },
-  { value: 'facebook', label: 'Facebook', group: '社交' },
+export const PLATFORM_OPTIONS: { value: string; label: string; group: PlatformGroup; hint: string }[] = [
+  { value: 'taobao', label: '淘宝', group: '电商', hint: '默认1:1，商品清晰完整，禁止水印、二维码和虚假促销' },
+  { value: 'tmall', label: '天猫', group: '电商', hint: '默认1:1；3:4需手动选择并确认类目已开放' },
+  { value: 'jd', label: '京东', group: '电商', hint: '默认1:1，商品居中完整，背景简洁' },
+  { value: 'pinduoduo', label: '拼多多', group: '电商', hint: '商品轮播图默认1:1，主体突出，禁止虚假活动角标' },
+  { value: 'amazon', label: 'Amazon', group: '电商', hint: '主图1:1纯白底，商品约占85%，禁止文字和无关道具' },
+  { value: 'shopee', label: 'Shopee', group: '电商', hint: '主图1:1，白色或干净背景，商品完整且约占75%' },
+  { value: 'lazada', label: 'Lazada', group: '电商', hint: '主图1:1，商品居中完整，白色或中性背景优先' },
+  { value: 'shein', label: 'SHEIN', group: '电商', hint: '主图默认1:1，详情图3:4，商品颜色、材质、图案与数量必须真实一致' },
+  { value: 'temu', label: 'Temu', group: '电商', hint: '主图和详情图默认1:1，背景简洁，完整展示正面、背面与细节' },
 ]
 
+export function platformRuleSummary(platforms: string[]): string {
+  if (platforms.length === 0) return '请选择目标平台'
+  if (platforms.length > 1) return `将为 ${platforms.length} 个平台分别应用主图与质检规则`
+  return PLATFORM_OPTIONS.find((option) => option.value === platforms[0])?.hint ?? '按平台应用图片规则'
+}
+
+const PLATFORM_MARKETS: Record<string, string> = {
+  taobao: 'CN',
+  tmall: 'CN',
+  jd: 'CN',
+  pinduoduo: 'CN',
+  amazon: 'US',
+  shopee: 'SG',
+  lazada: 'SG',
+  shein: 'US',
+  temu: 'US',
+}
+
+export function inferMarketFromPlatforms(platforms: string[]): string {
+  const normalized = platforms.map((platform) => platform.trim().toLowerCase()).filter(Boolean)
+  const mainlandPlatforms = new Set(['taobao', 'tmall', 'jd', 'pinduoduo'])
+
+  if (normalized.some((platform) => mainlandPlatforms.has(platform))) return 'CN'
+  return PLATFORM_MARKETS[normalized[0]] ?? 'US'
+}
+
 export const STYLE_PRESETS: Option[] = [
-  { value: '极简白底', label: '极简白底', hint: '纯白背景、产品居中、棚拍灯光' },
-  { value: '生活场景', label: '生活场景', hint: '真实使用场景、自然光、生活感' },
-  { value: '轻奢简约', label: '轻奢简约', hint: '高级灰背景、莫兰迪色、质感构图' },
-  { value: '活力色彩', label: '活力色彩', hint: '高饱和撞色、年轻化、强视觉冲击' },
-  { value: '手绘插画', label: '手绘插画', hint: '插画风背景、手绘元素装饰' },
-  { value: 'UGC快节奏', label: 'UGC 风格', hint: '手机拍摄感、自然光、生活博主感' },
-  { value: '日系清新', label: '日系清新', hint: '柔和光线、低饱和、文艺质感' },
-  { value: '工业冷感', label: '工业冷感', hint: '深色金属背景、冷色调、科技感' },
+  { value: '专业摄影棚、柔和棚拍光、干净背景', label: '摄影棚' },
+  { value: '居家生活场景、自然光、温暖舒适', label: '居家生活' },
+  { value: '城市街拍、自然步态、现代建筑背景', label: '城市街拍' },
+  { value: '户外自然场景、柔和日光、轻松氛围', label: '户外自然' },
+  { value: '度假海边、明亮阳光、清爽松弛感', label: '度假海边' },
+  { value: '高级商场、精致灯光、轻奢氛围', label: '高级商场' },
+  { value: '简约高级、低饱和配色、克制构图', label: '简约高级' },
+  { value: '活力年轻、明快色彩、自然动态姿势', label: '活力年轻' },
 ]

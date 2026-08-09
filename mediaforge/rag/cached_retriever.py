@@ -8,11 +8,22 @@ from mediaforge.rag.vector_store import VectorStore
 
 
 
-def _cache_key(text: str, category: str, top_k: int, query_image: list[float] | None = None) -> str:
+def _cache_key(
+    text: str,
+    category: str,
+    tenant_id: str,
+    top_k: int,
+    query_image: list[float] | None = None,
+    min_sales_count: int = 0,
+    quality_status: str = "",
+) -> str:
     img_sig = ""
     if query_image:
         img_sig = hashlib.sha256(json.dumps(query_image[:10]).encode()).hexdigest()[:12]
-    raw = f"rag:{text}:{category}:{top_k}:{img_sig}"
+    raw = (
+        f"rag:{tenant_id}:{text}:{category}:{top_k}:{img_sig}:"
+        f"{min_sales_count}:{quality_status}"
+    )
     return f"mediaforge:rag_cache:{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
 
@@ -34,13 +45,18 @@ class CachedRetriever:
         image_path: str | None,
         text: str,
         category: str,
+        tenant_id: str = "",
         top_k: int = 5,
         query_dense: list[float] | None = None,
-        query_sparse: dict[int, float] | None = None,
         query_image: list[float] | None = None,
+        min_sales_count: int = 0,
+        quality_status: str = "",
     ) -> list[RagResult]:
         if self.redis is not None:
-            key = _cache_key(text, category, top_k, query_image)
+            key = _cache_key(
+                text, category, tenant_id, top_k, query_image,
+                min_sales_count, quality_status,
+            )
             try:
                 cached = await self.redis.get(key)
                 if cached:
@@ -53,14 +69,19 @@ class CachedRetriever:
             image_path=image_path,
             text=text,
             category=category,
+            tenant_id=tenant_id,
             top_k=top_k,
             query_dense=query_dense,
-            query_sparse=query_sparse,
             query_image=query_image,
+            min_sales_count=min_sales_count,
+            quality_status=quality_status,
         )
 
         if self.redis is not None and results:
-            key = _cache_key(text, category, top_k, query_image)
+            key = _cache_key(
+                text, category, tenant_id, top_k, query_image,
+                min_sales_count, quality_status,
+            )
             try:
                 payload = json.dumps([r.model_dump() for r in results])
                 await self.redis.set(key, payload, ex=self.TTL_SECONDS)

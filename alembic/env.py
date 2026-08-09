@@ -21,6 +21,22 @@ from mediaforge.db.tables import Base  # noqa: E402
 
 target_metadata = Base.metadata
 
+# These tables are created and versioned by LangGraph's Postgres checkpointer,
+# not by MediaForge's SQLAlchemy metadata. Excluding them prevents Alembic
+# autogenerate from proposing destructive DROP TABLE operations.
+LANGGRAPH_TABLES = {
+    "checkpoint_blobs",
+    "checkpoint_migrations",
+    "checkpoint_writes",
+    "checkpoints",
+}
+
+
+def _include_object(object_, name, type_, reflected, compare_to) -> bool:
+    if type_ == "table" and name in LANGGRAPH_TABLES:
+        return False
+    return True
+
 
 def _get_url() -> str:
     url = os.environ.get("ALEMBIC_DATABASE_URL")
@@ -42,6 +58,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
         compare_server_default=True,
+        include_object=_include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -61,6 +78,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             compare_type=True,
             compare_server_default=True,
+            include_object=_include_object,
         )
         with context.begin_transaction():
             context.run_migrations()

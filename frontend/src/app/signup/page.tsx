@@ -3,20 +3,15 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { Check, Loader2 } from 'lucide-react'
 
 import { useAuth } from '@/store/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+
+const included = ['独立的商品与任务数据', 'Starter 工作空间', '注册后直接进入工作台']
+const allowSelfSignup = process.env.NEXT_PUBLIC_ALLOW_SELF_SIGNUP === 'true'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -27,49 +22,88 @@ export default function SignupPage() {
   const [localError, setLocalError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (isAuthenticated && tenant) {
-      router.replace('/dashboard')
-    }
+    if (isAuthenticated && tenant) router.replace('/dashboard')
   }, [isAuthenticated, tenant, router])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
     setLocalError(null)
     const trimmedEmail = email.trim()
+    if (!displayName.trim()) {
+      setLocalError('请输入名称')
+      return
+    }
     if (!trimmedEmail || password.length < 8) {
-      setLocalError('请输入邮箱,且密码长度不少于 8 位')
+      setLocalError('请输入有效邮箱，密码至少 8 位')
       return
     }
     try {
-      await signup(trimmedEmail, password, displayName.trim() || undefined)
+      await signup(trimmedEmail, password, displayName.trim())
     } catch {
-      // store already populated error
+      // Auth store already contains the server error.
     }
   }
 
-  const shownError = error || localError
+  if (!allowSelfSignup) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background p-4">
+        <section className="w-full max-w-md rounded-xl border bg-card p-8 text-center shadow-xl">
+          <h1 className="text-2xl font-semibold">公开注册已关闭</h1>
+          <p className="mt-3 text-sm text-muted-foreground">请联系部署管理员创建账号后登录。</p>
+          <Button asChild className="mt-6">
+            <Link href="/login">返回登录</Link>
+          </Button>
+        </section>
+      </main>
+    )
+  }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-xl font-bold text-primary-foreground">
-            MF
+    <main className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-8">
+      <div className="grid w-full max-w-4xl overflow-hidden rounded-xl border bg-card shadow-2xl shadow-black/20 md:grid-cols-[0.95fr_1.05fr]">
+        <aside className="hidden flex-col justify-between border-r bg-muted/20 p-10 md:flex">
+          <div>
+            <div className="flex h-10 w-10 items-center justify-center bg-primary font-bold text-primary-foreground">
+              MF
+            </div>
+            <p className="mt-8 text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+              Start simple
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-tight">
+              创建账号，即可开始自己的素材工作空间。
+            </h1>
           </div>
-          <CardTitle>创建您的账号</CardTitle>
-          <CardDescription>加入 MediaForge,开始生成电商素材</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <div className="space-y-4">
+            {included.map((item) => (
+              <div key={item} className="flex items-center gap-3 text-sm">
+                <span className="flex h-6 w-6 items-center justify-center border border-primary/40 text-primary">
+                  <Check className="h-3.5 w-3.5" />
+                </span>
+                {item}
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <section className="p-6 sm:p-10">
+          <div className="mb-8 md:hidden">
+            <div className="flex h-10 w-10 items-center justify-center bg-primary font-bold text-primary-foreground">
+              MF
+            </div>
+          </div>
+          <p className="text-sm font-medium text-primary">创建账号</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">开始使用 MediaForge</h2>
+          <p className="mt-2 text-sm text-muted-foreground">注册后自动创建独立的 Starter 工作空间。</p>
+
+          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="display_name">显示名称(可选)</Label>
+              <Label htmlFor="display_name">名称</Label>
               <Input
                 id="display_name"
-                type="text"
                 autoComplete="name"
-                placeholder="您的名字"
+                placeholder="你的名字或品牌名"
                 value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
+                onChange={(event) => setDisplayName(event.target.value)}
                 disabled={isLoading}
               />
             </div>
@@ -79,10 +113,10 @@ export default function SignupPage() {
                 id="email"
                 type="email"
                 autoComplete="email"
-                placeholder="you@mediaforge.local"
+                placeholder="name@company.com"
                 value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value)
+                onChange={(event) => {
+                  setEmail(event.target.value)
                   if (error) clearError()
                 }}
                 disabled={isLoading}
@@ -96,29 +130,32 @@ export default function SignupPage() {
                 autoComplete="new-password"
                 placeholder="至少 8 位字符"
                 value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value)
+                onChange={(event) => {
+                  setPassword(event.target.value)
                   if (error) clearError()
                 }}
                 disabled={isLoading}
               />
             </div>
-            {shownError && <p className="text-sm text-destructive">{shownError}</p>}
-          </CardContent>
-          <CardFooter className="flex flex-col gap-2">
+            {(error || localError) && (
+              <p className="border-l-2 border-destructive pl-3 text-sm text-destructive">
+                {error || localError}
+              </p>
+            )}
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              注册
+              创建账号
             </Button>
-            <p className="text-sm text-muted-foreground">
-              已有账号?{' '}
-              <Link href="/login" className="text-primary hover:underline">
-                立即登录
-              </Link>
-            </p>
-          </CardFooter>
-        </form>
-      </Card>
-    </div>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            已有账号？{' '}
+            <Link href="/login" className="font-medium text-primary hover:underline">
+              返回登录
+            </Link>
+          </p>
+        </section>
+      </div>
+    </main>
   )
 }

@@ -87,5 +87,15 @@ def setup_logging(
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
     # Suppress noisy third-party loggers
-    for name in ("uvicorn.error", "uvicorn.access", "httpx", "httpcore", "chromadb", "sentence_transformers"):
+    for name in (
+        "uvicorn.error",
+        "uvicorn.access",
+        "httpx",
+        "httpcore",
+        "openai",
+        "openai._base_client",
+        "openrouter",
+        "langchain_openai",
+        "sentence_transformers",
+    ):
         logging.getLogger(name).setLevel(logging.WARNING)

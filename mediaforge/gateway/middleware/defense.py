@@ -19,6 +19,11 @@ class PromptInjectionDefender:
         r"ignore all prior",
         r"reveal (?:your|system) (?:prompt|instructions|secrets)",
         r"you are now .* mode",
+        r"disregard (?:all|any|the) (?:previous|prior) instructions",
+        r"act as (?:a|an) .* without restrictions",
+        r"忽略(?:之前|以上|前面|所有).{0,12}(?:指令|提示|规则)",
+        r"(?:泄露|显示|输出|告诉我).{0,12}(?:系统提示词|密钥|api.?key|内部指令)",
+        r"(?:切换|进入).{0,8}(?:开发者|管理员|越狱|无约束)模式",
         r"\{\{.*\}\}",
         r"<%.*%>",
     ]

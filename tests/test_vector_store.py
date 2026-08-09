@@ -1,28 +1,24 @@
-import pytest
+from types import SimpleNamespace
 
-from mediaforge.rag.models import RagItem
-from mediaforge.rag.vector_store import ChromaVectorStore
+from mediaforge.rag import factory
+from mediaforge.rag.milvus_store import MilvusVectorStore
 
 
-@pytest.mark.asyncio
-async def test_chroma_upsert_and_search(tmp_path):
-    store = ChromaVectorStore(persist_dir=str(tmp_path / "chroma"))
-    await store.upsert([
-        RagItem(
-            product_id="P001",
-            category="apparel",
-            style="elegant",
-            color="red",
-            material="silk",
-            image_url="https://example.com/p001.jpg",
-            text_embedding=[0.1] * 1024,
-        )
-    ])
-    results = await store.hybrid_search(
-        image_path=None,
-        text="elegant silk dress",
-        category="apparel",
-        top_k=3,
+def test_factory_uses_milvus_as_the_only_backend(monkeypatch):
+    settings = SimpleNamespace(
+        milvus_uri="http://milvus:19530",
+        milvus_token="",
+        milvus_db_name="default",
+        milvus_collection="mediaforge",
+        dashscope_text_dim=1024,
+        dashscope_image_dim=2560,
     )
-    assert len(results) == 1
-    assert results[0].product_id == "P001"
+    monkeypatch.setattr(factory, "get_settings", lambda: settings)
+    monkeypatch.setattr(factory, "_store", None)
+
+    store = factory.get_vector_store()
+
+    assert isinstance(store, MilvusVectorStore)
+    assert store.uri == "http://milvus:19530"
+    assert store.text_dim == 1024
+    assert store.image_dim == 2560
